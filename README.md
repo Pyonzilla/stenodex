@@ -1,5 +1,5 @@
-# Steno Dictionary Lookup
-https://pyonzilla.github.io/steno-lookup-tool/
+# StenoDict
+https://pyonzilla.github.io/stenodict/
 
 Web app for searching and visualizing Plover's custom stenography dictionaries.
 
