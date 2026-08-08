@@ -561,6 +561,24 @@
     </div>
 </div>
 
+<!-- What is this? Modal -->
+<div id="aboutModal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h3 id="aboutTitle">What is StenoDict?</h3>
+        <div id="aboutMessage" style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5; font-size: 0.9rem;">
+            <p><strong style="color: var(--text-main)">StenoDict</strong> is a tool designed for searching and visualizing Plover custom stenography dictionaries.</p>
+            <p style="margin-top: 10px;">It allows you to look up words or raw strokes, generates dynamic chord diagrams based on your custom layout, showing where your fingers need to go based on that. You also have 5 profiles in case you use more than one stenography theory/language.</p>
+            <p style="margin-top: 10px;"><strong style="color: var(--text-main)">Who is it for?</strong><br>
+            It is aimed at hobbyist stenographers who want a mobile-friendly lookup tool that can be installed and used offline, supporting custom layouts and dictionaries.</p>
+            <p style="margin-top: 10px;"><strong style="color: var(--text-main)">New to Stenography?</strong><br>
+            If you don't know what stenography is or want to learn how to do it, check out <a href="https://opensteno.org/" target="_blank" rel="noopener noreferrer" style="color: var(--accent);">Open Steno</a> or the <a href="https://plover.wiki/index.php/Plover_Wiki" target="_blank" rel="noopener noreferrer" style="color: var(--accent);">Plover Wiki</a>.</p>
+        </div>
+        <div class="modal-actions">
+            <button onclick="document.getElementById('aboutModal').classList.add('hidden')" style="width: 100%;">Close</button>
+        </div>
+    </div>
+</div>
+
 <div id="menuToggle" onclick="toggleSidebar()">&#10094;</div>
 
 <div id="sidebar">
@@ -657,6 +675,7 @@
     <!-- About Section -->
     <div class="section-title">About & Resources</div>
     <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+        <button onclick="document.getElementById('aboutModal').classList.remove('hidden')">What is this?</button>
         <button onclick="window.open('https://github.com/Pyonzilla/stenodict', '_blank')">GitHub Repository</button>
         <button onclick="document.getElementById('infoModal').classList.remove('hidden')">Offline Installation Guide</button>
     </div>
@@ -841,52 +860,58 @@
     });
 
     function promptClearProfile() {
-        openModal("Clear Profile Dictionaries", `Are you sure you want to delete all dictionaries for Profile ${settings.activeProfile}?`, () => {
-            const dictsToDelete = dictionaries.map(d => d.id);
+        openModal("Clear Profile Dictionaries", `Are you sure you want to delete all dictionaries for Profile ${settings.activeProfile}?`, async () => {
+            const dictsToDelete = dictionaries.map(d => ({id: d.id, name: d.name}));
             if (dictsToDelete.length === 0) return;
 
-            showLoader("Clearing Dictionaries", `Deleting 1 of ${dictsToDelete.length}...`);
+            showLoader("Clearing Dictionaries", "Preparing...");
             
-            let currentIdx = 0;
-
-            function deleteNext() {
-                if (currentIdx >= dictsToDelete.length) {
-                    loadDictionaries(true);
-                    return;
-                }
-
-                document.getElementById('loadingDesc').innerText = `Deleting ${currentIdx + 1} of ${dictsToDelete.length}...`;
-                
-                setTimeout(() => {
-                    const id = dictsToDelete[currentIdx];
-                    const tx = db.transaction(['dicts', 'entries'], 'readwrite');
-                    tx.objectStore('dicts').delete(id);
+            for (let d = 0; d < dictsToDelete.length; d++) {
+                const dict = dictsToDelete[d];
+                document.getElementById('loadingTitle').innerText = `Clearing File ${d + 1} of ${dictsToDelete.length}`;
+                await new Promise((resolve) => {
+                    const tx = db.transaction('entries', 'readonly');
+                    const req = tx.objectStore('entries').index('dictId').getAllKeys(IDBKeyRange.only(dict.id));
                     
-                    const index = tx.objectStore('entries').index('dictId');
-                    const req = index.openCursor(IDBKeyRange.only(id));
-                    
-                    req.onsuccess = (e) => {
-                        const cursor = e.target.result;
-                        if (cursor) {
-                            cursor.delete();
-                            cursor.continue();
+                    req.onsuccess = () => {
+                        const keys = req.result;
+                        if(!keys.length) {
+                            const metaTx = db.transaction('dicts', 'readwrite');
+                            metaTx.objectStore('dicts').delete(dict.id);
+                            metaTx.oncomplete = resolve;
+                            return;
                         }
+                        
+                        let i = 0;
+                        const CHUNK_SIZE = 5000;
+                        
+                        function deleteNextChunk() {
+                            if (i >= keys.length) {
+                                const metaTx = db.transaction('dicts', 'readwrite');
+                                metaTx.objectStore('dicts').delete(dict.id);
+                                metaTx.oncomplete = resolve;
+                                return;
+                            }
+                            
+                            document.getElementById('loadingDesc').innerText = `Deleting ${dict.name}... ${Math.round((i/keys.length)*100)}%`;
+                            
+                            requestAnimationFrame(() => {
+                                const chunkTx = db.transaction('entries', 'readwrite');
+                                const store = chunkTx.objectStore('entries');
+                                const end = Math.min(i + CHUNK_SIZE, keys.length);
+                                
+                                for(; i < end; i++) {
+                                    store.delete(keys[i]);
+                                }
+                                
+                                chunkTx.oncomplete = () => setTimeout(deleteNextChunk, 10);
+                            });
+                        }
+                        deleteNextChunk();
                     };
-
-                    tx.oncomplete = () => {
-                        currentIdx++;
-                        deleteNext();
-                    };
-
-                    tx.onerror = (err) => {
-                        console.error("Deletion error on dict", id, err);
-                        currentIdx++;
-                        deleteNext();
-                    };
-                }, 40);
+                });
             }
-
-            deleteNext();
+            loadDictionaries(true);
         });
     }
 
@@ -1203,7 +1228,7 @@
                     <div class="dict-name">${d.name}</div>
                     <div class="dict-priority">Priority: ${dictionaries.length - i}</div>
                 </div>
-                <button onclick="removeDict('${d.id}')">✕</button>
+                <button onclick="removeDict('${d.id}', '${d.name.replace(/'/g, "\\'")}')">✕</button>
             </div>
         `).join('');
     }
@@ -1314,28 +1339,54 @@
         });
     }
 
-    function removeDict(id) {
-        showLoader("Removing Dictionary", "Deleting entries...");
-        setTimeout(() => {
-            try {
-                const tx = db.transaction(['dicts', 'entries'], 'readwrite');
-                tx.objectStore('dicts').delete(id);
-                
-                const index = tx.objectStore('entries').index('dictId');
-                const req = index.openCursor(IDBKeyRange.only(id));
-                req.onsuccess = (e) => {
-                    const cursor = e.target.result;
-                    if (cursor) {
-                        cursor.delete();
-                        cursor.continue();
-                    }
-                };
-                tx.oncomplete = () => loadDictionaries(true); 
-            } catch(e) {
-                console.error("Failed to remove dictionary", e);
-                hideLoader();
+    function removeDict(id, name) {
+        showLoader("Removing Dictionary", `Preparing to delete ${name}...`);
+        
+        const tx = db.transaction('entries', 'readonly');
+        const req = tx.objectStore('entries').index('dictId').getAllKeys(IDBKeyRange.only(id));
+        
+        req.onsuccess = () => {
+            const keys = req.result;
+            if(!keys.length) {
+                finishRemoveDict(id);
+                return;
             }
-        }, 50);
+            
+            let i = 0;
+            const CHUNK_SIZE = 5000;
+            
+            function deleteNextChunk() {
+                if (i >= keys.length) {
+                    finishRemoveDict(id);
+                    return;
+                }
+                
+                document.getElementById('loadingDesc').innerText = `Deleting ${name}... ${Math.round((i/keys.length)*100)}%`;
+                
+                requestAnimationFrame(() => {
+                    const chunkTx = db.transaction('entries', 'readwrite');
+                    const store = chunkTx.objectStore('entries');
+                    const end = Math.min(i + CHUNK_SIZE, keys.length);
+                    
+                    for(; i < end; i++) {
+                        store.delete(keys[i]);
+                    }
+                    
+                    chunkTx.oncomplete = () => setTimeout(deleteNextChunk, 10);
+                    chunkTx.onerror = () => {
+                        console.error('Delete chunk error');
+                        hideLoader();
+                    };
+                });
+            }
+            deleteNextChunk();
+        };
+    }
+
+    function finishRemoveDict(id) {
+        const tx = db.transaction('dicts', 'readwrite');
+        tx.objectStore('dicts').delete(id);
+        tx.oncomplete = () => loadDictionaries(true);
     }
 
     // --- Search ---
