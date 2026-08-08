@@ -1,5 +1,5 @@
 {
-  "name": "Steno Dictionary Lookup",
+  "name": "StenoDict",
   "short_name": "StenoDict",
   "start_url": "./index.html",
   "display": "standalone",
