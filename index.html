@@ -115,6 +115,7 @@
             font-size: 1.2rem;
             transition: background 0.2s, border-color 0.2s;
             box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+            user-select: none;
         }
         #menuToggle:hover { background: var(--surface-hover); border-color: var(--text-main); }
 
@@ -528,7 +529,7 @@
     <p id="loadingDesc">Please wait a moment while we set things up.</p>
 </div>
 
-<!-- Custom In-Site Modal -->
+<!-- Custom Confirmation Modal -->
 <div id="customModal" class="modal-overlay hidden">
     <div class="modal-content">
         <h3 id="modalTitle">Confirm Action</h3>
@@ -540,12 +541,31 @@
     </div>
 </div>
 
-<div id="menuToggle" onclick="toggleSidebar()">⚙️</div>
+<!-- Info/Installation Modal -->
+<div id="infoModal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h3 id="infoTitle">Installation Guide</h3>
+        <div id="infoMessage" style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5; font-size: 0.9rem;">
+            <p><strong style="color: var(--text-main)">Android (Chrome)</strong><br>
+            1. Open this site in Chrome.<br>
+            2. Tap the three-dot menu in the top right.<br>
+            3. Select <b>Add to Home screen</b> or <b>Install app</b>.</p>
+            <p style="margin-top: 15px;"><strong style="color: var(--text-main)">iOS (Safari)</strong><br>
+            1. Open this site in Safari.<br>
+            2. Tap the Share icon at the bottom center.<br>
+            3. Scroll down and tap <b>Add to Home Screen</b>.</p>
+        </div>
+        <div class="modal-actions">
+            <button onclick="document.getElementById('infoModal').classList.add('hidden')" style="width: 100%;">Close</button>
+        </div>
+    </div>
+</div>
+
+<div id="menuToggle" onclick="toggleSidebar()">&#10094;</div>
 
 <div id="sidebar">
     <div class="sidebar-header">
         <h1>StenoDict</h1>
-        <button onclick="toggleSidebar()" style="font-size: 1rem; padding: 12px 18px; font-weight: bold;">✕ Close</button>
     </div>
 
     <!-- Profiles -->
@@ -632,6 +652,13 @@
     <div class="action-buttons-row">
         <button onclick="promptClearSettings()" style="flex:1; color: #ffaa55; border-color: #554422;">Clear Settings</button>
         <button onclick="promptClearProfile()" style="flex:1; color: #ff5555; border-color: #552222;">Clear Profile Dicts</button>
+    </div>
+
+    <!-- About Section -->
+    <div class="section-title">About & Resources</div>
+    <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+        <button onclick="window.open('https://github.com/Pyonzilla/stenodict', '_blank')">GitHub Repository</button>
+        <button onclick="document.getElementById('infoModal').classList.remove('hidden')">Offline Installation Guide</button>
     </div>
 </div>
 
@@ -949,9 +976,9 @@
         sidebar.classList.toggle('open');
         
         if (sidebar.classList.contains('open')) {
-            menuToggle.style.display = 'none';
+            menuToggle.innerHTML = '&#10095;'; // Right Arrow (❯)
         } else {
-            menuToggle.style.display = 'flex';
+            menuToggle.innerHTML = '&#10094;'; // Left Arrow (❮)
         }
     }
 
