@@ -1,4 +1,4 @@
-const CACHE_NAME = 'StenoDict-v1b';
+const CACHE_NAME = 'StenoDict-v1c';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
