@@ -1,54 +1,47 @@
-const CACHE_NAME = 'StenoDict-v1c';
+const CACHE_NAME = 'stenodict-v4';
 const ASSETS = [
     './',
-    'index.html',
-    'manifest.json'
+    './index.html',
+    './style.css',
+    './script.js',
+    './index.json',
+    './manifest.json'
 ];
 
-// Install Event: Activate immediately
 self.addEventListener('install', (event) => {
-    self.skipWaiting(); 
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+        caches.open(CACHE_NAME).then(async (cache) => {
+            const response = await fetch('./index.json', { cache: 'no-cache' });
+            const manifest = await response.json();
+            const lessonFiles = Array.isArray(manifest) ? manifest : manifest.lessons;
+            return cache.addAll([
+                ...ASSETS,
+                ...lessonFiles.map(fileName => `./${fileName}`)
+            ]);
+        })
     );
+    self.skipWaiting();
 });
 
-// Activate Event: Clear old cache storage and claim clients
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys().then((keys) => {
             return Promise.all(
-                keys.map((key) => {
-                    if (key !== CACHE_NAME) {
-                        return caches.delete(key);
-                    }
-                })
+                keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
             );
-        }).then(() => self.clients.claim())
+        })
     );
+    self.clients.claim();
 });
 
-// Fetch Event: Network-First for HTML, Cache-First for assets
 self.addEventListener('fetch', (event) => {
-    // For page navigation (index.html): Try network first. If online, get fresh copy & update cache. If offline, use cache.
-    if (event.request.mode === 'navigate' || event.request.url.includes('index.html')) {
-        event.respondWith(
-            fetch(event.request)
-                .then((networkResponse) => {
-                    return caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(event.request, networkResponse.clone());
-                        return networkResponse;
-                    });
-                })
-                .catch(() => caches.match(event.request))
-        );
-        return;
-    }
-
-    // Cache-First for static assets
     event.respondWith(
-        caches.match(event.request).then((cachedResponse) => {
-            return cachedResponse || fetch(event.request);
-        })
+        fetch(event.request).then((networkResponse) => {
+            if (event.request.method === 'GET' && networkResponse.ok) {
+                const responseToCache = networkResponse.clone();
+                caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseToCache));
+            }
+            return networkResponse;
+        }).catch(() => caches.match(event.request))
     );
 });

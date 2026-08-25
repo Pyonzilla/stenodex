@@ -5,6 +5,7 @@
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#000000",
+  "description": "Steno Dictionary and Practice Tool",
   "icons": [
     {
       "src": "https://www.w3.org/Icons/SVG/svg-logo.svg", 
