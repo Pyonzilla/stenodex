@@ -13,6 +13,7 @@ if ('serviceWorker' in navigator) {
     let dictionaries = [];
     let searchActiveKeys = new Set();
     let modalCallback = null;
+    let pendingImportPayload = null;
 
     const defaultLayout = {
         num:  ['#','#','#','#','#','#','#','#','#','#','#','#'],
@@ -39,14 +40,15 @@ if ('serviceWorker' in navigator) {
                 showNumberBar: settings.showNumberBar !== undefined ? settings.showNumberBar : true,
                 extraThumbs: settings.extraThumbs !== undefined ? settings.extraThumbs : false,
                 extraLeftCol: false,
-                practiceSoundFeedback: settings.profiles?.[i]?.audioFeedback || false
+                practiceSoundFeedback: settings.profiles?.[i]?.audioFeedback || false,
+                quoteLanguage: 'lessons/Random Quotes/Random Quote (English).json'
             };
         }
         
         settings.customTheme = settings.customTheme || {
             bg: '#000000', surface: '#111111', surfaceHover: '#222222', 
             border: '#333333', text: '#ffffff', accent: '#ff0055',
-            practiceCorrect: '#ffffff', practiceWrong: '#ff5555', practiceCursor: '#ff0055'
+            practiceUntyped: '#888888', practiceCorrect: '#ffffff', practiceWrong: '#ff5555', practiceCursor: '#ff0055'
         };
         settings.activeProfile = settings.activeProfile || 1;
         settings.searchMode = settings.searchMode || 'word';
@@ -65,14 +67,38 @@ if ('serviceWorker' in navigator) {
             if(settings.profiles[i].practiceSoundFeedback === undefined) {
                 settings.profiles[i].practiceSoundFeedback = settings.profiles[i].audioFeedback || false;
             }
+            if(settings.profiles[i].quoteLanguage === undefined) {
+                settings.profiles[i].quoteLanguage = 'lessons/Random Quotes/Random Quote (English).json';
+            }
         }
     }
 
     settings.customTheme = Object.assign({
         bg: '#000000', surface: '#111111', surfaceHover: '#222222', border: '#333333',
-        text: '#ffffff', accent: '#ff0055', practiceCorrect: '#ffffff',
+        text: '#ffffff', accent: '#ff0055', practiceUntyped: '#888888', practiceCorrect: '#ffffff',
         practiceWrong: '#ff5555', practiceCursor: '#ff0055'
     }, settings.customTheme || {});
+
+    const legacyPracticeSettings = {
+        practiceMaterial: localStorage.getItem('steno_practice_text') || '',
+        practiceMode: localStorage.getItem('steno_practice_mode') || 'random',
+        strokeVisibility: localStorage.getItem('steno_practice_vis') || 'always',
+        strokeHintType: localStorage.getItem('steno_practice_hint') || 'shortest',
+        practiceRepeats: localStorage.getItem('steno_practice_repeats') || '0',
+        practiceMaxWords: localStorage.getItem('steno_practice_maxWords') || '0',
+        practiceProblemWords: localStorage.getItem('steno_practice_problemWords') || '0',
+        practiceLesson: 'custom',
+        ignoreCaps: localStorage.getItem('steno_ignoreCaps') === '1',
+        ignorePunct: localStorage.getItem('steno_ignorePunct') === '1'
+    };
+    for (let profileId = 1; profileId <= 5; profileId++) {
+        const profile = settings.profiles[profileId];
+        Object.entries(legacyPracticeSettings).forEach(([key, fallback]) => {
+            if (profile[key] === undefined) {
+                profile[key] = profileId === Number(settings.activeProfile) ? fallback : (key === 'practiceMaterial' ? '' : fallback);
+            }
+        });
+    }
 
     function saveSettings() {
         localStorage.setItem('ploverSettings', JSON.stringify(settings));
@@ -170,6 +196,7 @@ if ('serviceWorker' in navigator) {
             document.documentElement.style.setProperty('--text-muted', settings.customTheme.text); 
             document.documentElement.style.setProperty('--accent', settings.customTheme.accent);
             document.documentElement.style.setProperty('--accent-invert', settings.customTheme.bg);
+            document.documentElement.style.setProperty('--practice-untyped', settings.customTheme.practiceUntyped);
             document.documentElement.style.setProperty('--practice-correct', settings.customTheme.practiceCorrect);
             document.documentElement.style.setProperty('--practice-wrong', settings.customTheme.practiceWrong);
             document.documentElement.style.setProperty('--practice-cursor', settings.customTheme.practiceCursor);
@@ -186,7 +213,43 @@ if ('serviceWorker' in navigator) {
         settings.activeProfile = profileId;
         saveSettings();
         document.getElementById('lblProfileNum').innerText = profileId;
+        loadPracticeSettingsForProfile();
+        syncQuoteLanguageUI();
+        drawPersistentProgressGraph();
         loadDictionaries(true); 
+    }
+
+    function savePracticeSettingsForProfile() {
+        const profile = settings.profiles[settings.activeProfile];
+        ['practiceMaterial', 'practiceMode', 'strokeVisibility', 'strokeHintType', 'practiceRepeats', 'practiceMaxWords', 'practiceProblemWords', 'practiceLesson'].forEach(id => {
+            const input = document.getElementById(id);
+            if (input) profile[id] = input.value;
+        });
+        localStorage.setItem('ploverSettings', JSON.stringify(settings));
+    }
+
+    function loadPracticeSettingsForProfile() {
+        const profile = settings.profiles[settings.activeProfile];
+        Object.entries({
+            practiceMaterial: 'practiceMaterial',
+            practiceMode: 'practiceMode',
+            strokeVisibility: 'strokeVisibility',
+            strokeHintType: 'strokeHintType',
+            practiceRepeats: 'practiceRepeats',
+            practiceMaxWords: 'practiceMaxWords',
+            practiceProblemWords: 'practiceProblemWords',
+            practiceLesson: 'lessonSelect'
+        }).forEach(([key, id]) => {
+            const input = document.getElementById(id);
+            if (input && profile[key] !== undefined) input.value = profile[key];
+        });
+    }
+
+    function clearPracticeMaterial() {
+        document.getElementById('practiceMaterial').value = '';
+        document.getElementById('lessonSelect').value = 'custom';
+        document.getElementById('newQuoteButton').classList.add('hidden');
+        savePracticeSettingsForProfile();
     }
 
     function showLoader(title, desc) {
@@ -285,17 +348,22 @@ if ('serviceWorker' in navigator) {
 
     function promptClearUserData() {
         openModal("Clear User Data", "Are you sure you want to erase your practice graph and problematic word list?", () => {
-            localStorage.removeItem(PROGRESS_STORAGE_KEY);
+            savePersistentProgress({ sessions: [], problematic: {} });
             renderPersistentProblemWords();
             drawPersistentProgressGraph();
         });
     }
 
     function exportUserData() {
+        savePracticeSettingsForProfile();
+        const selectedQuoteLanguage = document.getElementById('quoteLanguage')?.value;
+        if (selectedQuoteLanguage) {
+            settings.profiles[settings.activeProfile].quoteLanguage = selectedQuoteLanguage;
+        }
         const payload = {
             format: 'stenodict-user-data',
-            version: 1,
-            progress: getPersistentProgress(),
+            version: 2,
+            progress: getAllPersistentProgress(),
             settings: settings
         };
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'text/plain;charset=utf-8' });
@@ -318,30 +386,70 @@ if ('serviceWorker' in navigator) {
         reader.onload = () => {
             try {
                 const payload = JSON.parse(reader.result);
-                if (payload?.format !== 'stenodict-user-data' || payload?.version !== 1) {
+                if (payload?.format !== 'stenodict-user-data' || ![1, 2].includes(payload?.version)) {
                     throw new Error('Unsupported user data file.');
                 }
-                const progress = payload.progress;
                 const importedSettings = payload.settings;
-                if (!progress || !Array.isArray(progress.sessions) || !progress.problematic || typeof progress.problematic !== 'object' || Array.isArray(progress.problematic) || !importedSettings || typeof importedSettings !== 'object' || !importedSettings.profiles || typeof importedSettings.profiles !== 'object' || !importedSettings.customTheme || typeof importedSettings.customTheme !== 'object') {
+                const importedProgress = payload.version === 2 ? payload.progress : { profiles: { [settings.activeProfile]: payload.progress } };
+                if (!importedProgress || !importedProgress.profiles || typeof importedProgress.profiles !== 'object' || !importedSettings || typeof importedSettings !== 'object' || !importedSettings.profiles || typeof importedSettings.profiles !== 'object' || !importedSettings.customTheme || typeof importedSettings.customTheme !== 'object') {
                     throw new Error('Invalid user data.');
                 }
-                savePersistentProgress({
-                    sessions: progress.sessions,
-                    problematic: progress.problematic
-                });
-                settings = importedSettings;
-                localStorage.setItem('ploverSettings', JSON.stringify(settings));
-                saveSettings();
-                renderPersistentProblemWords();
-                drawPersistentProgressGraph();
-                openModal('User Data Imported', 'Your practice data, custom theme, site settings, and profile layouts were imported successfully.', () => {});
+                pendingImportPayload = { settings: importedSettings, progress: importedProgress };
+                showImportProfilesModal(Object.keys(importedSettings.profiles).filter(profileId => importedProgress.profiles[profileId]));
             } catch (error) {
                 openModal('Import Failed', 'Unable to import that user data file.', () => {});
             }
         };
         reader.onerror = () => openModal('Import Failed', 'Unable to read that user data file.', () => {});
         reader.readAsText(file);
+    }
+
+    function showImportProfilesModal(profileIds) {
+        const list = document.getElementById('importProfilesList');
+        list.innerHTML = profileIds.map(profileId => `<label><input type="checkbox" value="${profileId}" checked> Profile ${profileId}</label>`).join('');
+        document.getElementById('importProfilesModal').classList.remove('hidden');
+    }
+
+    function closeImportProfilesModal() {
+        document.getElementById('importProfilesModal').classList.add('hidden');
+        pendingImportPayload = null;
+    }
+
+    function confirmImportProfiles() {
+        if (!pendingImportPayload) return;
+        const selectedProfiles = Array.from(document.querySelectorAll('#importProfilesList input:checked')).map(input => input.value);
+        if (!selectedProfiles.length) return;
+
+        const imported = pendingImportPayload;
+        selectedProfiles.forEach(profileId => {
+            if (imported.settings.profiles[profileId]) {
+                settings.profiles[profileId] = Object.assign({}, settings.profiles[profileId], imported.settings.profiles[profileId]);
+                const importedProfile = settings.profiles[profileId];
+                const practiceDefaults = {
+                    practiceMaterial: '', practiceMode: 'random', practiceLesson: 'custom',
+                    strokeVisibility: 'always', strokeHintType: 'shortest',
+                    practiceRepeats: '0', practiceMaxWords: '0', practiceProblemWords: '0',
+                    ignoreCaps: false, ignorePunct: false,
+                    quoteLanguage: 'lessons/Random Quotes/Random Quote (English).json'
+                };
+                Object.entries(practiceDefaults).forEach(([key, fallback]) => {
+                    if (importedProfile[key] === undefined) importedProfile[key] = fallback;
+                });
+            }
+        });
+        settings.customTheme = Object.assign({
+            bg: '#000000', surface: '#111111', surfaceHover: '#222222', border: '#333333',
+            text: '#ffffff', accent: '#ff0055', practiceUntyped: '#888888', practiceCorrect: '#ffffff',
+            practiceWrong: '#ff5555', practiceCursor: '#ff0055'
+        }, imported.settings.customTheme);
+        saveAllPersistentProgress(getAllPersistentProgress(), imported.progress, selectedProfiles);
+        localStorage.setItem('ploverSettings', JSON.stringify(settings));
+        closeImportProfilesModal();
+        updateSettingsUI();
+        applyThemeStyles();
+        renderPersistentProblemWords();
+        drawPersistentProgressGraph();
+        openModal('User Data Imported', 'The selected profile data, layouts, and settings were imported successfully.', () => {});
     }
 
     function toggleSearchMenu(event) {
@@ -394,7 +502,7 @@ if ('serviceWorker' in navigator) {
             if(btn) btn.className = p.theme === t ? 'active' : '';
         });
 
-        ['bg', 'surface', 'surfaceHover', 'border', 'text', 'accent', 'practiceCorrect', 'practiceWrong', 'practiceCursor'].forEach(k => {
+        ['bg', 'surface', 'surfaceHover', 'border', 'text', 'accent', 'practiceUntyped', 'practiceCorrect', 'practiceWrong', 'practiceCursor'].forEach(k => {
             const el = document.getElementById('c_' + k);
             if(el) el.value = settings.customTheme[k];
         });
@@ -432,17 +540,18 @@ if ('serviceWorker' in navigator) {
 
     // Practice toggles: ignore capitalization & ignore punctuation
     function togglePracticeOption(key) {
-        const storageKey = key === 'ignoreCaps' ? 'steno_ignoreCaps' : 'steno_ignorePunct';
-        const cur = localStorage.getItem(storageKey) === '1';
-        localStorage.setItem(storageKey, cur ? '0' : '1');
+        const profile = settings.profiles[settings.activeProfile];
+        profile[key] = !profile[key];
+        localStorage.setItem('ploverSettings', JSON.stringify(settings));
         updatePracticeTogglesUI();
         try { renderMonkeyText(); skipHiddenPunctuationTokens(); updateMonkeyVisuals(); } catch (e) {}
     }
 
     function updatePracticeTogglesUI() {
         try {
-            const ic = localStorage.getItem('steno_ignoreCaps') === '1';
-            const ip = localStorage.getItem('steno_ignorePunct') === '1';
+            const profile = settings.profiles[settings.activeProfile];
+            const ic = profile.ignoreCaps;
+            const ip = profile.ignorePunct;
             if (typeof practiceState !== 'undefined') {
                 practiceState.ignoreCaps = ic;
                 practiceState.ignorePunct = ip;
@@ -1066,18 +1175,60 @@ if ('serviceWorker' in navigator) {
 
     function getPersistentProgress() {
         try {
-            const progress = JSON.parse(localStorage.getItem(PROGRESS_STORAGE_KEY)) || { sessions: [], problematic: {} };
-            progress.sessions = (progress.sessions || []).filter(session => Number(session.words) >= 10).slice(-MAX_PROGRESS_SESSIONS);
-            const problematicEntries = Object.entries(progress.problematic || {}).slice(0, MAX_PROBLEMATIC_WORDS);
-            progress.problematic = Object.fromEntries(problematicEntries);
+            const stored = JSON.parse(localStorage.getItem(PROGRESS_STORAGE_KEY));
+            if (stored && stored.profiles && typeof stored.profiles === 'object') {
+                return normalizeProgress(stored.profiles[settings.activeProfile]);
+            }
+            const progress = normalizeProgress(stored);
+            saveAllPersistentProgress({ profiles: { [settings.activeProfile]: progress } });
             return progress;
         } catch (e) {
-            return { sessions: [], problematic: {} };
+            return normalizeProgress(null);
         }
     }
 
+    function normalizeProgress(progress) {
+        progress = progress && typeof progress === 'object' ? progress : {};
+        progress.sessions = (Array.isArray(progress.sessions) ? progress.sessions : [])
+            .filter(session => Number(session.words) >= 10).slice(-MAX_PROGRESS_SESSIONS);
+        const problematicEntries = Object.entries(progress.problematic && typeof progress.problematic === 'object' ? progress.problematic : {})
+            .slice(0, MAX_PROBLEMATIC_WORDS);
+        progress.problematic = Object.fromEntries(problematicEntries);
+        return progress;
+    }
+
+    function getAllPersistentProgress() {
+        try {
+            const stored = JSON.parse(localStorage.getItem(PROGRESS_STORAGE_KEY));
+            if (stored && stored.profiles && typeof stored.profiles === 'object') {
+                const profiles = {};
+                for (let profileId = 1; profileId <= 5; profileId++) profiles[profileId] = normalizeProgress(stored.profiles[profileId]);
+                return { profiles };
+            }
+            const profiles = {};
+            for (let profileId = 1; profileId <= 5; profileId++) profiles[profileId] = normalizeProgress(profileId === Number(settings.activeProfile) ? stored : null);
+            return { profiles };
+        } catch (e) {
+            const profiles = {};
+            for (let profileId = 1; profileId <= 5; profileId++) profiles[profileId] = normalizeProgress(null);
+            return { profiles };
+        }
+    }
+
+    function saveAllPersistentProgress(progress, importedProgress = null, selectedProfiles = []) {
+        const current = progress && progress.profiles ? progress : getAllPersistentProgress();
+        if (importedProgress) {
+            selectedProfiles.forEach(profileId => {
+                if (importedProgress.profiles[profileId]) current.profiles[profileId] = normalizeProgress(importedProgress.profiles[profileId]);
+            });
+        }
+        localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(current));
+    }
+
     function savePersistentProgress(progress) {
-        localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(progress));
+        const allProgress = getAllPersistentProgress();
+        allProgress.profiles[settings.activeProfile] = normalizeProgress(progress);
+        saveAllPersistentProgress(allProgress);
     }
 
     function registerCorrectPracticeWord(word) {
@@ -1215,6 +1366,98 @@ if ('serviceWorker' in navigator) {
         }
     }
 
+    const practiceQuoteFiles = new Map();
+    const practiceQuotePools = new Map();
+    const lastPracticeQuoteIndexes = new Map();
+
+    function getRandomPracticeQuote(quotes, source) {
+        if (quotes.length < 2) return quotes[0] || '';
+        const previousIndex = lastPracticeQuoteIndexes.get(source);
+        let quoteIndex;
+        do {
+            quoteIndex = Math.floor(Math.random() * quotes.length);
+        } while (quoteIndex === previousIndex);
+        lastPracticeQuoteIndexes.set(source, quoteIndex);
+        return quotes[quoteIndex];
+    }
+
+    async function loadPracticeQuotes(source) {
+        if (practiceQuotePools.has(source)) return practiceQuotePools.get(source);
+        try {
+            const response = await fetch(source, { cache: 'no-cache' });
+            if (!response.ok) throw new Error('Quote file unavailable.');
+            const quotes = await response.json();
+            const pool = Array.isArray(quotes) ? quotes.filter(quote => typeof quote === 'string' && quote.trim()) : [];
+            practiceQuotePools.set(source, pool);
+            return pool;
+        } catch (error) {
+            console.warn('Unable to load random quotes:', error);
+            return [];
+        }
+    }
+
+    async function chooseNewQuote() {
+        const language = document.getElementById('quoteLanguage');
+        const source = language.value;
+        if (!source) return;
+        const quotes = await loadPracticeQuotes(source);
+        if (!quotes.length) {
+            openModal('Random Quote Unavailable', 'The quote file could not be loaded.', () => {});
+            return;
+        }
+        document.getElementById('practiceMaterial').value = getRandomPracticeQuote(quotes, source);
+        document.getElementById('practiceMode').value = 'ordered';
+        document.getElementById('newQuoteButton').classList.remove('hidden');
+        savePracticeSettingsForProfile();
+    }
+
+    function syncQuoteLanguageUI() {
+        const quoteLanguage = document.getElementById('quoteLanguage');
+        const newQuoteButton = document.getElementById('newQuoteButton');
+        if (!quoteLanguage || !newQuoteButton) return;
+        const profileLanguage = settings.profiles[settings.activeProfile].quoteLanguage;
+        const hasProfileLanguage = profileLanguage && Array.from(quoteLanguage.options).some(option => option.value === profileLanguage);
+        quoteLanguage.value = hasProfileLanguage ? profileLanguage : '';
+        newQuoteButton.classList.toggle('hidden', !quoteLanguage.value);
+    }
+
+    function getRandomDictionaryWords(count = 500) {
+        return new Promise((resolve) => {
+            if (!db || !dictionaries.length) {
+                resolve([]);
+                return;
+            }
+            const activeDictIds = new Set(dictionaries.map(dictionary => dictionary.id));
+            const seenWords = new Set();
+            const selectedWords = [];
+            const request = db.transaction('entries', 'readonly').objectStore('entries').openCursor();
+            request.onsuccess = event => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    const entry = cursor.value;
+                    const word = typeof entry.word === 'string' ? entry.word.trim() : '';
+                    const wordKey = word.toLowerCase();
+                    const isOrdinaryWord = /^\p{L}+(?:['-]\p{L}+)*$/u.test(word);
+                    if (activeDictIds.has(entry.dictId) && isOrdinaryWord && !seenWords.has(wordKey)) {
+                        seenWords.add(wordKey);
+                        if (selectedWords.length < count) {
+                            selectedWords.push(word);
+                        } else {
+                            const replacementIndex = Math.floor(Math.random() * seenWords.size);
+                            if (replacementIndex < count) {
+                                selectedWords[replacementIndex] = word;
+                            }
+                        }
+                    }
+                    cursor.continue();
+                    return;
+                }
+                resolve(shuffleArray(selectedWords));
+            };
+            request.onerror = () => resolve([]);
+        });
+    }
+
     async function loadLessons() {
         const select = document.getElementById('lessonSelect');
         const material = document.getElementById('practiceMaterial');
@@ -1223,6 +1466,24 @@ if ('serviceWorker' in navigator) {
 
         material.addEventListener('input', () => {
             if (select.value !== 'custom') select.value = 'custom';
+            document.getElementById('newQuoteButton').classList.add('hidden');
+            settings.profiles[settings.activeProfile].practiceLesson = 'custom';
+            settings.profiles[settings.activeProfile].practiceMaterial = material.value;
+            localStorage.setItem('ploverSettings', JSON.stringify(settings));
+        });
+
+        const quoteLanguage = document.getElementById('quoteLanguage');
+        quoteLanguage.addEventListener('change', () => {
+            settings.profiles[settings.activeProfile].quoteLanguage = quoteLanguage.value;
+            saveSettings();
+            document.getElementById('newQuoteButton').classList.toggle('hidden', !quoteLanguage.value);
+        });
+
+        ['practiceMode', 'strokeHintType', 'strokeVisibility', 'practiceRepeats', 'practiceMaxWords', 'practiceProblemWords'].forEach(id => {
+            const input = document.getElementById(id);
+            if (!input) return;
+            input.addEventListener('input', savePracticeSettingsForProfile);
+            input.addEventListener('change', savePracticeSettingsForProfile);
         });
 
         const problematicOption = document.createElement('option');
@@ -1244,18 +1505,47 @@ if ('serviceWorker' in navigator) {
 
         lessonFiles.forEach(fileName => {
             if (typeof fileName !== 'string' || !/^[^<>:"|?*]+\.json$/i.test(fileName)) return;
+            const quoteMatch = fileName.match(/^lessons\/Random Quotes\/Random Quote \((.+)\)\.json$/i);
+            if (quoteMatch) {
+                const languageName = quoteMatch[1];
+                const option = document.createElement('option');
+                option.value = fileName;
+                option.textContent = languageName;
+                quoteLanguage.appendChild(option);
+                practiceQuoteFiles.set(fileName, languageName);
+                return;
+            }
             const option = document.createElement('option');
             option.value = fileName;
             option.textContent = getLessonTitle(fileName);
             select.appendChild(option);
         });
+        syncQuoteLanguageUI();
+        loadPracticeSettingsForProfile();
 
         select.addEventListener('change', async () => {
+            document.getElementById('newQuoteButton').classList.add('hidden');
+            settings.profiles[settings.activeProfile].practiceLesson = select.value;
+            savePracticeSettingsForProfile();
             if (select.value === 'custom') return;
+            if (select.value === 'random-dictionary') {
+                select.disabled = true;
+                const words = await getRandomDictionaryWords();
+                if (!words.length) {
+                    openModal('Random Words Unavailable', 'Add a dictionary to the current profile before choosing random words.', () => {});
+                } else {
+                    material.value = words.join(' ');
+                    document.getElementById('practiceMode').value = 'random';
+                    savePracticeSettingsForProfile();
+                }
+                select.disabled = false;
+                return;
+            }
             if (select.value === 'problematic') {
                 const problematicWords = Object.keys(getPersistentProgress().problematic);
                 material.value = problematicWords.join(' ');
                 document.getElementById('practiceMode').value = 'ordered';
+                savePracticeSettingsForProfile();
                 select.disabled = false;
                 return;
             }
@@ -1264,6 +1554,7 @@ if ('serviceWorker' in navigator) {
                 const response = await fetch(select.value, { cache: 'no-cache' });
                 if (!response.ok) throw new Error('Lesson file unavailable.');
                 material.value = await readLessonResponse(response);
+                savePracticeSettingsForProfile();
             } catch (error) {
                 alert('Unable to load that lesson.');
                 select.value = 'custom';
@@ -1277,11 +1568,17 @@ if ('serviceWorker' in navigator) {
 
     function generatePracticeQueue(rawText, mode) {
         practiceState.customDict = null;
-        const ignorePunct = localStorage.getItem('steno_ignorePunct') === '1';
+        const ignorePunct = settings.profiles[settings.activeProfile].ignorePunct;
         const cleanPracticeWord = word => ignorePunct
             ? String(word).replace(/[\.,!?;:"()\[\]{}<>-]/g, '')
             : String(word);
         
+        const clippyEntries = parseClippyTape(rawText);
+        if (clippyEntries.length) {
+            practiceState.customDict = Object.fromEntries(clippyEntries.map(entry => [entry.word, entry.stroke]));
+            return mode === 'random' ? shuffleArray(clippyEntries.map(entry => entry.word)) : clippyEntries.map(entry => entry.word);
+        }
+
         // Check for Typey Type format (Word [tab or spaces] Stroke) line by line
         const lines = rawText.trim().split('\n');
         let isTypeyType = false; 
@@ -1340,6 +1637,33 @@ if ('serviceWorker' in navigator) {
         return queue;
     }
 
+    function parseClippyTape(rawText) {
+        const hintType = document.getElementById('strokeHintType')?.value || 'shortest';
+        const entries = [];
+        for (const sourceLine of String(rawText || '').split(/\r?\n/)) {
+            const line = sourceLine.replace(/^\s*\[[^\]]+\]\s*/, '').trim();
+            const separatorIndex = line.indexOf('||');
+            if (separatorIndex < 0) continue;
+            const word = line.slice(0, separatorIndex).trim();
+            const outlineText = line.slice(separatorIndex + 2);
+            const arrowIndex = outlineText.indexOf('->');
+            if (!word || arrowIndex < 0) continue;
+            const alternatives = outlineText.slice(arrowIndex + 2)
+                .split(',')
+                .map(outline => outline.trim())
+                .filter(Boolean);
+            if (!alternatives.length) continue;
+            const score = outline => outline.split('/').filter(Boolean).length;
+            const selected = alternatives.reduce((best, outline) => {
+                if (!best) return outline;
+                const comparison = score(outline) - score(best);
+                return hintType === 'longest' ? (comparison > 0 ? outline : best) : (comparison < 0 ? outline : best);
+            }, '');
+            entries.push({ word, stroke: selected });
+        }
+        return entries;
+    }
+
     // Helper: shuffle an array non-destructively
     function shuffleArray(arr) {
         return arr.slice().sort(() => Math.random() - 0.5);
@@ -1385,13 +1709,7 @@ if ('serviceWorker' in navigator) {
         const vis = document.getElementById('strokeVisibility').value;
         const hintType = document.getElementById('strokeHintType').value;
 
-        localStorage.setItem('steno_practice_text', text);
-        localStorage.setItem('steno_practice_mode', mode);
-        localStorage.setItem('steno_practice_vis', vis);
-        localStorage.setItem('steno_practice_hint', hintType);
-        localStorage.setItem('steno_practice_repeats', document.getElementById('practiceRepeats').value);
-        localStorage.setItem('steno_practice_maxWords', document.getElementById('practiceMaxWords').value);
-        localStorage.setItem('steno_practice_problemWords', document.getElementById('practiceProblemWords').value);
+        savePracticeSettingsForProfile();
 
         practiceState.isEndless = false;
         practiceState.words = generatePracticeQueue(text, mode);
@@ -1404,7 +1722,7 @@ if ('serviceWorker' in navigator) {
         }
 
         // If ignore punctuation is enabled, remove punctuation tokens entirely from the practice queue
-        if (localStorage.getItem('steno_ignorePunct') === '1') {
+        if (settings.profiles[settings.activeProfile].ignorePunct) {
             practiceState.words = practiceState.words.filter(w => !(/^[\.,!?;:\"()\[\]{}<>]+$/).test(w));
         }
         // Max words cap: 0 means no cap
@@ -1455,8 +1773,8 @@ if ('serviceWorker' in navigator) {
         practiceState.mode = mode;
         practiceState.visibility = vis;
         practiceState.hintType = hintType;
-        practiceState.ignoreCaps = localStorage.getItem('steno_ignoreCaps') === '1';
-        practiceState.ignorePunct = localStorage.getItem('steno_ignorePunct') === '1';
+        practiceState.ignoreCaps = settings.profiles[settings.activeProfile].ignoreCaps;
+        practiceState.ignorePunct = settings.profiles[settings.activeProfile].ignorePunct;
         practiceState.normalizedWords = practiceState.words.map(word => normalizeForComparison(word));
         practiceState.missed.clear();
         practiceState.inefficient.clear();
@@ -2400,7 +2718,7 @@ if ('serviceWorker' in navigator) {
         const ctx = canvas.getContext('2d');
         const root = getComputedStyle(document.body);
         const border = root.getPropertyValue('--border').trim() || '#555555';
-        const colors = ['--stat-wpm', '--stat-acc', '--stat-str', '--stat-idle', '--accent', '--stat-acc'].map(name => root.getPropertyValue(name).trim());
+        const colors = ['--stat-wpm', '--stat-acc', '--stat-str', '--stat-idle', '--stat-streak'].map(name => root.getPropertyValue(name).trim());
         const metrics = [
             { name: 'WPM', suffix: '', step: 20, fallback: 100 },
             { name: 'Accuracy', suffix: '%', step: 10, fixedMax: 100 },
@@ -2444,11 +2762,12 @@ if ('serviceWorker' in navigator) {
             ctx.setLineDash([]);
             ctx.fillStyle = colors[metricIndex];
             ctx.textAlign = 'right';
-            ctx.fillText(metric.name, practiceGraphPadding.left - 10, top + 8);
-            ctx.fillText(`${maxValue}${metric.suffix}`, practiceGraphPadding.left - 10, top + 23);
+            ctx.fillText(`${maxValue}${metric.suffix}`, practiceGraphPadding.left - 10, top);
             ctx.fillText(`0${metric.suffix}`, practiceGraphPadding.left - 10, bottom);
 
-            const rawColor = metricIndex === 2 ? 'rgba(216, 195, 106, 0.4)' : `${colors[metricIndex]}55`;
+            const rawColor = metricIndex === 2
+                ? 'rgba(216, 195, 106, 0.4)'
+                : metricIndex === 4 ? colors[metricIndex] : `${colors[metricIndex]}55`;
             ctx.beginPath(); ctx.strokeStyle = rawColor; ctx.lineWidth = 1.5;
             points.forEach((point, index) => index === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y));
             ctx.stroke();
@@ -2457,13 +2776,6 @@ if ('serviceWorker' in navigator) {
                 ctx.arc(point.x, point.y, index === selectedIndex || index === hoverIndex ? 4 : 2.5, 0, Math.PI * 2); ctx.fill();
             });
             drawSmoothGraphLine(ctx, points, colors[metricIndex], 2.5);
-        });
-
-        ctx.font = '12px monospace';
-        ctx.textAlign = 'center';
-        ['WPM', 'Accuracy', 'Avg Strokes', 'Idle Time', 'Streak'].forEach((name, index) => {
-            ctx.fillStyle = colors[index];
-            ctx.fillText(name, canvas.width / 2 - 200 + index * 100, canvas.height - 15);
         });
     }
 
@@ -2574,38 +2886,6 @@ if ('serviceWorker' in navigator) {
         drawPersistentProgressGraph();
         renderPersistentProblemWords();
     }
-
-    // Auto-load previous settings
-    const storedText = localStorage.getItem('steno_practice_text');
-    if (storedText) document.getElementById('practiceMaterial').value = storedText;
-    const storedMode = localStorage.getItem('steno_practice_mode');
-    if (storedMode) document.getElementById('practiceMode').value = storedMode;
-    const storedVis = localStorage.getItem('steno_practice_vis');
-    if (storedVis) document.getElementById('strokeVisibility').value = storedVis;
-    const storedHint = localStorage.getItem('steno_practice_hint');
-    if (storedHint) document.getElementById('strokeHintType').value = storedHint;
-    const storedRepeats = localStorage.getItem('steno_practice_repeats');
-    if (storedRepeats !== null) document.getElementById('practiceRepeats').value = storedRepeats;
-    const storedMaxWords = localStorage.getItem('steno_practice_maxWords');
-    if (storedMaxWords !== null) document.getElementById('practiceMaxWords').value = storedMaxWords;
-    const storedProblemWords = localStorage.getItem('steno_practice_problemWords');
-    if (storedProblemWords !== null) document.getElementById('practiceProblemWords').value = storedProblemWords;
-
-    const practiceSettingStorageKeys = {
-        practiceMaterial: 'steno_practice_text',
-        practiceMode: 'steno_practice_mode',
-        strokeVisibility: 'steno_practice_vis',
-        strokeHintType: 'steno_practice_hint',
-        practiceRepeats: 'steno_practice_repeats',
-        practiceMaxWords: 'steno_practice_maxWords',
-        practiceProblemWords: 'steno_practice_problemWords'
-    };
-    Object.entries(practiceSettingStorageKeys).forEach(([id, storageKey]) => {
-        const input = document.getElementById(id);
-        if (!input) return;
-        input.addEventListener('input', () => localStorage.setItem(storageKey, input.value));
-        input.addEventListener('change', () => localStorage.setItem(storageKey, input.value));
-    });
 
     window.onload = () => {
         updateSettingsUI();

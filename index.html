@@ -26,6 +26,18 @@
     </div>
 </div>
 
+<div id="importProfilesModal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h3>Import Profiles</h3>
+        <p style="color:var(--text-muted);margin-bottom:15px;">Choose which profiles to import. Existing data in selected profiles will be replaced.</p>
+        <div id="importProfilesList" class="import-profiles-list"></div>
+        <div class="modal-actions">
+            <button onclick="closeImportProfilesModal()">Cancel</button>
+            <button onclick="confirmImportProfiles()" style="color:var(--accent);border-color:var(--accent);">Import Selected</button>
+        </div>
+    </div>
+</div>
+
 <div id="infoModal" class="modal-overlay hidden">
     <div class="modal-content">
         <h3 id="infoTitle">Installation Guide</h3>
@@ -124,6 +136,7 @@
         <label>Border <input type="color" id="c_border" onchange="updateCustomColor('border', this.value)"></label>
         <label>Text <input type="color" id="c_text" onchange="updateCustomColor('text', this.value)"></label>
         <label>Accent <input type="color" id="c_accent" onchange="updateCustomColor('accent', this.value)"></label>
+        <label>Untyped Text <input type="color" id="c_practiceUntyped" onchange="updateCustomColor('practiceUntyped', this.value)"></label>
         <label>Correct Text <input type="color" id="c_practiceCorrect" onchange="updateCustomColor('practiceCorrect', this.value)"></label>
         <label>Wrong Text <input type="color" id="c_practiceWrong" onchange="updateCustomColor('practiceWrong', this.value)"></label>
         <label>Cursor <input type="color" id="c_practiceCursor" onchange="updateCustomColor('practiceCursor', this.value)"></label>
@@ -202,16 +215,24 @@
         <div id="practiceSetup" class="config-wrapper">
             <select id="lessonSelect" class="profile-select lesson-select" aria-label="Practice lesson">
                 <option value="custom">Custom Material</option>
+                <option value="random-dictionary">Random from Dictionary</option>
             </select>
             <h2 style="margin-bottom: 15px; font-size: 1.2rem;">Practice Configuration</h2>
-            <textarea id="practiceMaterial" placeholder="Paste your practice text here... Or paste Typey Type format (Word [tab] STROKE) line by line to practice exact outlines!"></textarea>
+            <textarea id="practiceMaterial" placeholder="Paste your practice text here... Or paste Typey Type format (Word [tab] STROKE) or Plover Clippy Tape logs to practice exact outlines!"></textarea>
+            <div id="quoteControls" class="quote-controls">
+                <select id="quoteLanguage" class="profile-select" aria-label="Quote language">
+                    <option value="">Choose quote language</option>
+                </select>
+                <button id="newQuoteButton" class="hidden" onclick="chooseNewQuote()">New Quote</button>
+                <button id="clearPracticeButton" onclick="clearPracticeMaterial()" title="Clear practice text">Clear</button>
+            </div>
             
             <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
                 <select id="practiceMode" class="profile-select" style="flex: 1; margin: 0;">
-                    <option value="random">Random Words</option>
-                    <option value="ordered">Ordered Words</option>
-                    <option value="random-pyramid">Random Pyramid</option>
-                    <option value="ordered-pyramid">Ordered Pyramid</option>
+                    <option value="random">Words in Random Order</option>
+                    <option value="ordered">Words in Ordered Order</option>
+                    <option value="random-pyramid">Words in Random Pyramid</option>
+                    <option value="ordered-pyramid">Words in Ordered Pyramid</option>
                     <!-- Endless Mode removed -->
                 </select>
 
@@ -252,7 +273,7 @@
                 <div class="stat-box" style="flex:1;text-align:center;padding:12px;">Accuracy<br><span id="progressAcc" class="stat-acc" style="font-size:1.8rem;">100.00%</span></div>
                 <div class="stat-box" style="flex:1;text-align:center;padding:12px;">Idle<br><span id="progressIdle" class="stat-idle" style="font-size:1.8rem;">0.000s</span></div>
                 <div class="stat-box" style="flex:1;text-align:center;padding:12px;">Avg Strokes/Word<br><span id="progressStr" class="stat-str" style="font-size:1.8rem;">0.00</span></div>
-                <div class="stat-box" style="flex:1;text-align:center;padding:12px;">Longest Streak<br><span id="progressStreak" style="font-size:1.8rem;">0</span></div>
+                <div class="stat-box" style="flex:1;text-align:center;padding:12px;">Longest Streak<br><span id="progressStreak" class="stat-streak" style="font-size:1.8rem;">0</span></div>
             </div>
             <div id="progressGraphWrap" style="position: relative;">
                 <canvas id="progressGraph" width="800" height="400" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;"></canvas>
@@ -270,7 +291,7 @@
                     <div class="stat-box" title="Accuracy">Acc: <span id="liveAcc" class="stat-acc">100.00%</span></div>
                     <div class="stat-box" title="Average Idle Gap; graph displays this value multiplied by 10">Idle: <span id="liveIdle" class="stat-idle">0.000s</span></div>
                     <div class="stat-box" title="Average Strokes per Word">Avg Str: <span id="liveAvgStr" class="stat-str">0.00</span></div>
-                    <div class="stat-box" title="Current / Longest Correct Streak">Streak: <span id="liveStreak">0</span> / <span id="liveLongestStreak">0</span></div>
+                    <div class="stat-box" title="Current / Longest Correct Streak">Streak: <span id="liveStreak" class="stat-streak">0</span> / <span id="liveLongestStreak" class="stat-streak">0</span></div>
                 </div>
                 <button onclick="endPractice()" style="border-color: #ff5555; color: #ff5555; width: auto; padding: 8px 16px; z-index: 20; position: relative;">End Session</button>
             </div>
@@ -291,7 +312,7 @@
                 <div class="stat-box" style="flex: 1; text-align: center; font-size: 1rem; padding: 15px;">Accuracy<br><span id="resAcc" style="font-size: 2.2rem;" class="stat-acc">100.00%</span></div>
                 <div class="stat-box" style="flex: 1; text-align: center; font-size: 1rem; padding: 15px;">Idle<br><span id="resIdle" style="font-size: 2.2rem;" class="stat-idle">0.000s</span></div>
                 <div class="stat-box" style="flex: 1; text-align: center; font-size: 1rem; padding: 15px;">Avg Strokes/Word<br><span id="resStr" style="font-size: 2.2rem;" class="stat-str">0</span></div>
-                <div class="stat-box" style="flex: 1; text-align: center; font-size: 1rem; padding: 15px;">Longest Streak<br><span id="resStreak" style="font-size: 2.2rem;">0</span></div>
+                <div class="stat-box" style="flex: 1; text-align: center; font-size: 1rem; padding: 15px;">Longest Streak<br><span id="resStreak" class="stat-streak" style="font-size: 2.2rem;">0</span></div>
             </div>
 
             <div style="position: relative;">
