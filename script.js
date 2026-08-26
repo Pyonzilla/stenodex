@@ -361,7 +361,7 @@ if ('serviceWorker' in navigator) {
             settings.profiles[settings.activeProfile].quoteLanguage = selectedQuoteLanguage;
         }
         const payload = {
-            format: 'stenodict-user-data',
+            format: 'stenodex-user-data',
             version: 2,
             progress: getAllPersistentProgress(),
             settings: settings
@@ -370,7 +370,7 @@ if ('serviceWorker' in navigator) {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = 'stenodict-user-data.txt';
+        link.download = 'stenodex-user-data.txt';
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -386,7 +386,7 @@ if ('serviceWorker' in navigator) {
         reader.onload = () => {
             try {
                 const payload = JSON.parse(reader.result);
-                if (payload?.format !== 'stenodict-user-data' || ![1, 2].includes(payload?.version)) {
+                if (payload?.format !== 'stenodex-user-data' || ![1, 2].includes(payload?.version)) {
                     throw new Error('Unsupported user data file.');
                 }
                 const importedSettings = payload.settings;

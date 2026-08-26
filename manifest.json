@@ -1,11 +1,11 @@
 {
-  "name": "StenoDict",
-  "short_name": "StenoDict",
+  "name": "StenoDex",
+  "short_name": "StenoDex",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#000000",
-  "description": "Steno Dictionary and Practice Tool",
+  "description": "Steno Lookup and Practice Tool",
   "icons": [
     {
       "src": "https://www.w3.org/Icons/SVG/svg-logo.svg", 

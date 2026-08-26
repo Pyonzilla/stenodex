@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
-    <title>StenoDict</title>
+    <title>StenoDex</title>
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
 </head>
@@ -59,9 +59,9 @@
 
 <div id="aboutModal" class="modal-overlay hidden">
     <div class="modal-content">
-        <h3 id="aboutTitle">What is StenoDict?</h3>
+        <h3 id="aboutTitle">What is StenoDex?</h3>
         <div id="aboutMessage" style="color: var(--text-muted); margin-bottom: 25px; line-height: 1.5; font-size: 0.9rem;">
-            <p><strong style="color: var(--text-main)">StenoDict</strong> is a tool designed for searching and visualizing Plover custom stenography dictionaries.</p>
+            <p><strong style="color: var(--text-main)">StenoDex</strong> is a tool designed for searching and visualizing Plover custom stenography dictionaries.</p>
             <p style="margin-top: 10px;">It allows you to look up words or raw strokes, generates dynamic chord diagrams based on your custom layout, showing where your fingers need to go based on that. You also have 5 profiles in case you use more than one stenography theory/language.</p>
             <p style="margin-top: 10px;"><strong style="color: var(--text-main)">Who is it for?</strong><br>
             It is aimed at hobbyist stenographers who want a mobile-friendly lookup/practice tool that can be installed and used offline, supporting custom layouts and dictionaries. The exercises provided in the Practice Mode Tab are from <a href="https://lapwing.aerick.ca/Home.html" target="_blank" rel="noopener noreferrer" style="color: var(--accent);">Lapwing for Beginners</a> but you can use your own in text or typey type format. If you wish to use the lookup feature with the lapwing dictionary, you can find it <a href="https://github.com/aerickt/plover-lapwing-aio" target="_blank" rel="noopener noreferrer" style="color: var(--accent);">here</a>.</p>
@@ -78,7 +78,7 @@
 
 <div id="sidebar">
     <div class="sidebar-header">
-        <h1>StenoDict</h1>
+        <h1>StenoDex</h1>
     </div>
 
     <div class="section-title">Profile Selection</div>
@@ -177,7 +177,7 @@
     <div class="section-title">About & Resources</div>
     <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
         <button onclick="document.getElementById('aboutModal').classList.remove('hidden')">What is this?</button>
-        <button onclick="window.open('https://github.com/Pyonzilla/stenodict', '_blank')">GitHub Repository</button>
+        <button onclick="window.open('https://github.com/Pyonzilla/stenodex', '_blank')">GitHub Repository</button>
         <button onclick="document.getElementById('infoModal').classList.remove('hidden')">Offline Installation Guide</button>
         <button onclick="window.open('https://ko-fi.com/pyonzilla', '_blank', 'noopener,noreferrer')">Hit me on Ko-fi</button>
     </div>
