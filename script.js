@@ -763,6 +763,10 @@ if ('serviceWorker' in navigator) {
 
     function initDB() {
         const req = indexedDB.open(DB_NAME, DB_VERSION);
+        const startupFallback = setTimeout(() => {
+            console.warn('Dictionary database startup is taking longer than expected.');
+            hideLoader();
+        }, 5000);
         
         req.onupgradeneeded = (e) => {
             const database = e.target.result;
@@ -778,7 +782,9 @@ if ('serviceWorker' in navigator) {
         };
         
         req.onsuccess = (e) => { 
+            clearTimeout(startupFallback);
             db = e.target.result; 
+            db.onversionchange = () => db.close();
             
             const tx = db.transaction('entries', 'readonly');
             if (!tx.objectStore('entries').indexNames.contains('stroke')) {
@@ -791,7 +797,13 @@ if ('serviceWorker' in navigator) {
         };
         
         req.onerror = (e) => {
+            clearTimeout(startupFallback);
             console.error("Database failed to open", e);
+            hideLoader();
+        };
+        req.onblocked = () => {
+            console.warn('Dictionary database startup is blocked by another tab.');
+            hideLoader();
         };
     }
 
@@ -1385,8 +1397,9 @@ if ('serviceWorker' in navigator) {
         const profile = settings.profiles[settings.activeProfile];
         const hintType = document.getElementById('strokeHintType')?.value || 'shortest';
         const cards = [];
-        for (const word of words) {
-            const limits = practiceState.maxStrokesMap[word] || await getStrokeLimitsAndOutlines(word);
+        const limitsByWord = await Promise.all(words.map(async word => [word, practiceState.maxStrokesMap[word] || await getStrokeLimitsAndOutlines(word)]));
+        for (const [word, limits] of limitsByWord) {
+            practiceState.maxStrokesMap[word] = limits;
             const stroke = entries[word].stroke || (hintType === 'longest'
                 ? (limits.longest || limits.shortest || '')
                 : (limits.shortest || limits.longest || ''));
@@ -3060,4 +3073,5 @@ if ('serviceWorker' in navigator) {
         renderPersistentProblemWords();
         drawPersistentProgressGraph();
         initDB();
+        setTimeout(hideLoader, 5000);
     };
