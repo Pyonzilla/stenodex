@@ -3072,6 +3072,6 @@ if ('serviceWorker' in navigator) {
         try { setSearchMode(settings.searchMode || 'word'); } catch(e) {}
         renderPersistentProblemWords();
         drawPersistentProgressGraph();
+        hideLoader();
         initDB();
-        setTimeout(hideLoader, 5000);
     };

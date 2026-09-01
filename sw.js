@@ -1,4 +1,4 @@
-const CACHE_NAME = 'stenodex-v5.7';
+const CACHE_NAME = 'stenodex-v5.8';
 const ASSETS = [
     './',
     './index.html',
@@ -11,19 +11,7 @@ const ASSETS = [
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME).then(async (cache) => {
-            const response = await fetch('./index.json', { cache: 'no-cache' });
-            const manifest = await response.json();
-            const lessonFiles = Array.isArray(manifest) ? manifest : manifest.lessons;
             await cache.addAll(ASSETS);
-            await Promise.all(lessonFiles.filter(fileName => typeof fileName === 'string').map(async fileName => {
-                const url = `./${fileName.replace(/^\.\//, '')}`;
-                try {
-                    const lessonResponse = await fetch(url, { cache: 'no-cache' });
-                    if (lessonResponse.ok) await cache.put(url, lessonResponse);
-                } catch (error) {
-                    console.warn('Unable to cache lesson:', url, error);
-                }
-            }));
             return cache;
         })
     );
@@ -39,16 +27,42 @@ self.addEventListener('activate', (event) => {
         })
     );
     self.clients.claim();
+    cacheLessonsInBackground();
 });
+
+async function cacheLessonsInBackground() {
+    try {
+        const response = await fetch('./index.json', { cache: 'no-cache' });
+        const manifest = await response.json();
+        const lessonFiles = Array.isArray(manifest) ? manifest : manifest.lessons;
+        if (!Array.isArray(lessonFiles)) return;
+        const cache = await caches.open(CACHE_NAME);
+        for (const fileName of lessonFiles) {
+            if (typeof fileName !== 'string') continue;
+            const url = `./${fileName.replace(/^\.\//, '')}`;
+            try {
+                const lessonResponse = await fetch(url, { cache: 'no-cache' });
+                if (lessonResponse.ok) await cache.put(url, lessonResponse);
+            } catch (error) {
+                console.warn('Unable to cache lesson:', url, error);
+            }
+        }
+    } catch (error) {
+        console.warn('Unable to warm lesson cache:', error);
+    }
+}
 
 self.addEventListener('fetch', (event) => {
     event.respondWith(
-        fetch(event.request).then((networkResponse) => {
+        caches.match(event.request).then((cachedResponse) => {
+            const networkRequest = fetch(event.request).then((networkResponse) => {
             if (event.request.method === 'GET' && networkResponse.ok) {
                 const responseToCache = networkResponse.clone();
                 caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseToCache));
             }
             return networkResponse;
+            });
+            return cachedResponse || networkRequest;
         }).catch(() => caches.match(event.request))
     );
 });
