@@ -24,7 +24,21 @@ if ('serviceWorker' in navigator) {
         thmbL: [' ', 'A-', 'O-'], thmbR: ['E-', 'U-', ' ']
     };
 
-    let settings = JSON.parse(localStorage.getItem('ploverSettings')) || {};
+    let settings = {};
+    try {
+        const savedSettings = localStorage.getItem('ploverSettings');
+        settings = savedSettings ? JSON.parse(savedSettings) : {};
+    } catch (error) {
+        console.warn('Saved settings could not be loaded. Starting with defaults.', error);
+        try {
+            const unreadableSettings = localStorage.getItem('ploverSettings');
+            if (unreadableSettings) localStorage.setItem('ploverSettings_corrupt_backup', unreadableSettings);
+            localStorage.removeItem('ploverSettings');
+        } catch (backupError) {
+            console.warn('Unable to back up unreadable settings.', backupError);
+        }
+    }
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) settings = {};
     
     if (!settings.profiles) {
         settings.profiles = {};
@@ -61,6 +75,20 @@ if ('serviceWorker' in navigator) {
         delete settings.extraThumbs;
     } else {
         for(let i=1; i<=5; i++) {
+            if (!settings.profiles[i] || typeof settings.profiles[i] !== 'object') {
+                settings.profiles[i] = {
+                    theme: 'dark',
+                    layout: JSON.parse(JSON.stringify(defaultLayout)),
+                    showDiagrams: true,
+                    showNumberBar: true,
+                    extraThumbs: false,
+                    extraLeftCol: false,
+                    practiceSoundFeedback: false,
+                    quoteLanguage: 'lessons/Random Quotes/Random Quote (English).json',
+                    practiceList: 'problematic'
+                };
+            }
+            if (!settings.profiles[i].layout || typeof settings.profiles[i].layout !== 'object') settings.profiles[i].layout = JSON.parse(JSON.stringify(defaultLayout));
             if(!settings.profiles[i].layout.extL) settings.profiles[i].layout.extL = [' ', ' '];
             while(settings.profiles[i].layout.num.length < 12) settings.profiles[i].layout.num.push('#');
             if(settings.profiles[i].extraLeftCol === undefined) settings.profiles[i].extraLeftCol = false;

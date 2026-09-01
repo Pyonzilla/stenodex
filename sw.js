@@ -1,4 +1,4 @@
-const CACHE_NAME = 'stenodex-v5.8';
+const CACHE_NAME = 'stenodex-v5.9';
 const ASSETS = [
     './',
     './index.html',
@@ -52,17 +52,26 @@ async function cacheLessonsInBackground() {
     }
 }
 
+function fetchWithTimeout(request, timeoutMs = 2500) {
+    return Promise.race([
+        fetch(request),
+        new Promise((resolve, reject) => setTimeout(() => reject(new Error('Network request timed out.')), timeoutMs))
+    ]);
+}
+
 self.addEventListener('fetch', (event) => {
+    const requestUrl = new URL(event.request.url);
+    const isAppShell = requestUrl.pathname.endsWith('/index.html') || requestUrl.pathname.endsWith('/script.js') || requestUrl.pathname.endsWith('/style.css') || requestUrl.pathname.endsWith('/sw.js');
     event.respondWith(
         caches.match(event.request).then((cachedResponse) => {
-            const networkRequest = fetch(event.request).then((networkResponse) => {
+            const networkRequest = fetchWithTimeout(event.request).then((networkResponse) => {
             if (event.request.method === 'GET' && networkResponse.ok) {
                 const responseToCache = networkResponse.clone();
                 caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseToCache));
             }
             return networkResponse;
             });
-            return cachedResponse || networkRequest;
+            return isAppShell ? networkRequest.catch(() => cachedResponse) : (cachedResponse || networkRequest);
         }).catch(() => caches.match(event.request))
     );
 });
