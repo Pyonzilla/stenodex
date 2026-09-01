@@ -17,7 +17,6 @@
             --stat-wpm: #3a86ff;
             --stat-acc: #2ec4b6;
             --stat-str: #ff9f1c;
-            --stat-idle: #e71d36;
             --stat-streak: #f15bb5;
         }
 
@@ -441,6 +440,7 @@
             border-top: 1px dashed var(--border);
             width: 100%;
         }
+        .stroke-action-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
         .raw-steno {
             font-family: monospace;
@@ -531,6 +531,21 @@
         .view-tabs button.active { background: var(--accent); color: var(--accent-invert); border-color: var(--accent); }
 
         /* Practice Setup */
+        .practice-config-heading {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 15px;
+        }
+        .practice-config-heading h2 { margin: 0; font-size: 1.2rem; }
+        .practice-settings-group { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
+        .practice-select-row .profile-select { flex: 1 1 220px; margin: 0; }
+        .practice-options-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: center; gap: 10px; }
+        .practice-number-control { display: flex; align-items: center; justify-content: flex-start; gap: 8px; min-width: 0; }
+        .practice-number-control label { font-size: 0.9rem; color: var(--text-muted); }
+        .practice-toggles-row { display: flex; gap: 10px; margin: 0 0 15px; }
+        .practice-toggles-row .practice-toggle { flex: 1; justify-content: center; }
         #practiceMaterial {
             width: 100%;
             height: 120px;
@@ -570,6 +585,32 @@
             color: var(--practice-wrong);
             border-color: var(--practice-wrong);
         }
+        .practice-estimate {
+            color: var(--text-muted);
+            font: 0.85rem monospace;
+            margin: 0;
+            text-align: right;
+        }
+        .practice-list-heading { display: flex; align-items: center; gap: 10px; }
+        .practice-list-heading .profile-select { flex: 1; width: auto; margin: 0; }
+        #clearPracticeListButton { flex: 0 0 auto; color: var(--practice-wrong); border-color: var(--practice-wrong); white-space: nowrap; }
+        .practice-list-card { position: relative; display: block; }
+        .practice-remove {
+            position: static;
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            color: var(--practice-wrong);
+            border-color: var(--practice-wrong);
+            z-index: 1;
+        }
+        .practice-list-top { display: block; min-height: 30px; }
+        .practice-list-actions { position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 8px; }
+        .practice-list-bottom { display: flex; justify-content: flex-end; margin-top: 8px; }
+        .practice-stroke-picker { color: var(--text-muted); font: 0.8rem monospace; }
+        .practice-stroke-picker { display: inline-flex; align-items: center; }
+        .practice-stroke-picker select { width: auto; max-width: 180px; margin: 0; padding: 6px 8px; }
+        .add-brief-button { margin: 0 0 0 8px; color: var(--accent); border-color: var(--accent); }
 
         /* Monkeytype Typing UI */
         #practiceInput {
@@ -688,7 +729,6 @@
         .stat-wpm { color: var(--stat-wpm); font-weight: bold; }
         .stat-acc { color: var(--stat-acc); font-weight: bold; }
         .stat-str { color: var(--stat-str); font-weight: bold; }
-        .stat-idle { color: var(--stat-idle); font-weight: bold; }
         .stat-streak { color: var(--stat-streak); font-weight: bold; }
         
         .stroke-hint {
@@ -719,9 +759,17 @@
 
         @media (max-width: 400px) {
             #sidebar { padding: 20px; }
+            .practice-options-row { grid-template-columns: 1fr; }
+            .practice-config-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
+            .practice-estimate { text-align: left; }
+            .practice-toggles-row { flex-direction: column; }
+            .practice-list-heading { align-items: stretch; flex-direction: column; }
             .stroke-graph-step { width: 100%; }
             .sidebar-header h1 { font-size: 1.2rem; }
             .action-buttons-row { flex-direction: column; }
             .search-mode-btn { padding: 0 10px; font-size: 0.9rem; }
             .search-input { padding: 12px; font-size: 1rem; }
         }
+        .practice-progress-box { flex: 1; min-width: 150px; box-sizing: border-box; display: flex; flex-direction: row; justify-content: flex-start; align-items: center; gap: 8px; white-space: nowrap; }
+        .practice-progress-track { flex: 1; width: auto; height: 5px; margin-top: 0; background: var(--surface-hover); border-radius: 3px; overflow: hidden; }
+        .practice-progress-bar { height: 100%; width: 0; background: var(--accent); transition: width 0.15s ease-out; }

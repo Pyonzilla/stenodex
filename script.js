@@ -41,7 +41,8 @@ if ('serviceWorker' in navigator) {
                 extraThumbs: settings.extraThumbs !== undefined ? settings.extraThumbs : false,
                 extraLeftCol: false,
                 practiceSoundFeedback: settings.profiles?.[i]?.audioFeedback || false,
-                quoteLanguage: 'lessons/Random Quotes/Random Quote (English).json'
+                quoteLanguage: 'lessons/Random Quotes/Random Quote (English).json',
+                practiceList: 'problematic'
             };
         }
         
@@ -70,6 +71,7 @@ if ('serviceWorker' in navigator) {
             if(settings.profiles[i].quoteLanguage === undefined) {
                 settings.profiles[i].quoteLanguage = 'lessons/Random Quotes/Random Quote (English).json';
             }
+            if(settings.profiles[i].practiceList === undefined) settings.profiles[i].practiceList = 'problematic';
         }
     }
 
@@ -87,6 +89,9 @@ if ('serviceWorker' in navigator) {
         practiceRepeats: localStorage.getItem('steno_practice_repeats') || '0',
         practiceMaxWords: localStorage.getItem('steno_practice_maxWords') || '0',
         practiceProblemWords: localStorage.getItem('steno_practice_problemWords') || '0',
+        practiceBriefWords: localStorage.getItem('steno_practice_briefWords') || '0',
+        practiceStartWord: localStorage.getItem('steno_practice_startWord') || '1',
+        practiceEndWord: localStorage.getItem('steno_practice_endWord') || '0',
         practiceLesson: 'custom',
         ignoreCaps: localStorage.getItem('steno_ignoreCaps') === '1',
         ignorePunct: localStorage.getItem('steno_ignorePunct') === '1'
@@ -221,10 +226,12 @@ if ('serviceWorker' in navigator) {
 
     function savePracticeSettingsForProfile() {
         const profile = settings.profiles[settings.activeProfile];
-        ['practiceMaterial', 'practiceMode', 'strokeVisibility', 'strokeHintType', 'practiceRepeats', 'practiceMaxWords', 'practiceProblemWords', 'practiceLesson'].forEach(id => {
+        ['practiceMaterial', 'practiceMode', 'strokeVisibility', 'strokeHintType', 'practiceRepeats', 'practiceMaxWords', 'practiceProblemWords', 'practiceBriefWords', 'practiceStartWord', 'practiceEndWord', 'practiceLesson'].forEach(id => {
             const input = document.getElementById(id);
             if (input) profile[id] = input.value;
         });
+        const practiceList = document.getElementById('practiceListSelect');
+        if (practiceList) profile.practiceList = practiceList.value;
         localStorage.setItem('ploverSettings', JSON.stringify(settings));
     }
 
@@ -238,7 +245,11 @@ if ('serviceWorker' in navigator) {
             practiceRepeats: 'practiceRepeats',
             practiceMaxWords: 'practiceMaxWords',
             practiceProblemWords: 'practiceProblemWords',
-            practiceLesson: 'lessonSelect'
+            practiceBriefWords: 'practiceBriefWords',
+            practiceStartWord: 'practiceStartWord',
+            practiceEndWord: 'practiceEndWord',
+            practiceLesson: 'lessonSelect',
+            practiceList: 'practiceListSelect'
         }).forEach(([key, id]) => {
             const input = document.getElementById(id);
             if (input && profile[key] !== undefined) input.value = profile[key];
@@ -250,6 +261,7 @@ if ('serviceWorker' in navigator) {
         document.getElementById('lessonSelect').value = 'custom';
         document.getElementById('newQuoteButton').classList.add('hidden');
         savePracticeSettingsForProfile();
+        updatePracticeEstimate();
     }
 
     function showLoader(title, desc) {
@@ -347,8 +359,8 @@ if ('serviceWorker' in navigator) {
     }
 
     function promptClearUserData() {
-        openModal("Clear User Data", "Are you sure you want to erase your practice graph and problematic word list?", () => {
-            savePersistentProgress({ sessions: [], problematic: {} });
+        openModal("Clear User Data", "Are you sure you want to erase your practice graph, problematic words, and briefs?", () => {
+            savePersistentProgress({ sessions: [], problematic: {}, briefs: {} });
             renderPersistentProblemWords();
             drawPersistentProgressGraph();
         });
@@ -362,7 +374,7 @@ if ('serviceWorker' in navigator) {
         }
         const payload = {
             format: 'stenodex-user-data',
-            version: 2,
+            version: 3,
             progress: getAllPersistentProgress(),
             settings: settings
         };
@@ -386,11 +398,11 @@ if ('serviceWorker' in navigator) {
         reader.onload = () => {
             try {
                 const payload = JSON.parse(reader.result);
-                if (payload?.format !== 'stenodex-user-data' || ![1, 2].includes(payload?.version)) {
+                if (payload?.format !== 'stenodex-user-data' || ![1, 2, 3].includes(payload?.version)) {
                     throw new Error('Unsupported user data file.');
                 }
                 const importedSettings = payload.settings;
-                const importedProgress = payload.version === 2 ? payload.progress : { profiles: { [settings.activeProfile]: payload.progress } };
+                const importedProgress = payload.version >= 2 ? payload.progress : { profiles: { [settings.activeProfile]: payload.progress } };
                 if (!importedProgress || !importedProgress.profiles || typeof importedProgress.profiles !== 'object' || !importedSettings || typeof importedSettings !== 'object' || !importedSettings.profiles || typeof importedSettings.profiles !== 'object' || !importedSettings.customTheme || typeof importedSettings.customTheme !== 'object') {
                     throw new Error('Invalid user data.');
                 }
@@ -428,8 +440,8 @@ if ('serviceWorker' in navigator) {
                 const practiceDefaults = {
                     practiceMaterial: '', practiceMode: 'random', practiceLesson: 'custom',
                     strokeVisibility: 'always', strokeHintType: 'shortest',
-                    practiceRepeats: '0', practiceMaxWords: '0', practiceProblemWords: '0',
-                    ignoreCaps: false, ignorePunct: false,
+                    practiceRepeats: '0', practiceMaxWords: '0', practiceProblemWords: '0', practiceBriefWords: '0', practiceStartWord: '1', practiceEndWord: '0',
+                    ignoreCaps: false, ignorePunct: false, practiceList: 'problematic',
                     quoteLanguage: 'lessons/Random Quotes/Random Quote (English).json'
                 };
                 Object.entries(practiceDefaults).forEach(([key, fallback]) => {
@@ -445,6 +457,7 @@ if ('serviceWorker' in navigator) {
         saveAllPersistentProgress(getAllPersistentProgress(), imported.progress, selectedProfiles);
         localStorage.setItem('ploverSettings', JSON.stringify(settings));
         closeImportProfilesModal();
+        loadPracticeSettingsForProfile();
         updateSettingsUI();
         applyThemeStyles();
         renderPersistentProblemWords();
@@ -544,6 +557,7 @@ if ('serviceWorker' in navigator) {
         profile[key] = !profile[key];
         localStorage.setItem('ploverSettings', JSON.stringify(settings));
         updatePracticeTogglesUI();
+        updatePracticeEstimate();
         try { renderMonkeyText(); skipHiddenPunctuationTokens(); updateMonkeyVisuals(); } catch (e) {}
     }
 
@@ -1089,7 +1103,7 @@ if ('serviceWorker' in navigator) {
 
                 strokesHTML += `
                     <div class="stroke-row">
-                        <div class="raw-steno">${entry.stroke.replace(/</g, '&lt;')}</div>
+                        <div class="stroke-action-row"><div class="raw-steno">${entry.stroke.replace(/</g, '&lt;')}</div><button class="add-brief-button" onclick="addBrief('${escapeHtml(word).replace(/'/g, '&#39;')}', '${escapeHtml(entry.stroke).replace(/'/g, '&#39;')}', this)">Add to briefs list</button></div>
                         ${graphHTML}
                     </div>
                 `;
@@ -1139,6 +1153,7 @@ if ('serviceWorker' in navigator) {
         customDict: null,
         
         sessionStartTime: 0,
+        sessionStartDate: null,
         lastInputTime: 0,
         lastInputValue: '',
         lastStrokeTime: 0,
@@ -1147,8 +1162,6 @@ if ('serviceWorker' in navigator) {
         lastCheckedInput: '',
         pendingSnapshotTimer: 0,
         pendingEraseTimer: 0,
-        idleGaps: [],
-        avgIdle: 0,
         statsHistory: [],
         graphSelectedIndex: -1,
         graphHoverIndex: -1,
@@ -1194,6 +1207,7 @@ if ('serviceWorker' in navigator) {
         const problematicEntries = Object.entries(progress.problematic && typeof progress.problematic === 'object' ? progress.problematic : {})
             .slice(0, MAX_PROBLEMATIC_WORDS);
         progress.problematic = Object.fromEntries(problematicEntries);
+        progress.briefs = progress.briefs && typeof progress.briefs === 'object' ? progress.briefs : {};
         return progress;
     }
 
@@ -1252,6 +1266,59 @@ if ('serviceWorker' in navigator) {
         savePersistentProgress(progress);
     }
 
+    async function getWordStrokeChoices(word) {
+        if (!db) return [];
+        return new Promise(resolve => {
+            const request = db.transaction('entries', 'readonly').objectStore('entries').index('word_lower').getAll(IDBKeyRange.only(word.toLowerCase()));
+            request.onsuccess = event => {
+                const activeIds = new Set(dictionaries.map(dictionary => dictionary.id));
+                resolve([...new Set(event.target.result.filter(entry => activeIds.has(entry.dictId)).map(entry => entry.stroke))]);
+            };
+            request.onerror = () => resolve([]);
+        });
+    }
+
+    function removePracticeListWord(listName, word) {
+        openModal('Remove Practice Word', `Remove "${word}" from your ${listName === 'briefs' ? 'briefs' : 'problematic words'}?`, () => {
+            const progress = getPersistentProgress();
+            delete progress[listName][word];
+            savePersistentProgress(progress);
+            renderPersistentProblemWords();
+        });
+    }
+
+    function clearPracticeList() {
+        const listSelect = document.getElementById('practiceListSelect');
+        const listName = listSelect?.value || 'problematic';
+        const displayName = listName === 'briefs' ? 'My Briefs' : 'Problematic Words';
+        openModal('Clear Practice List', `Are you sure you want to clear the entire ${displayName} list? This cannot be undone.`, () => {
+            const progress = getPersistentProgress();
+            progress[listName] = {};
+            savePersistentProgress(progress);
+            renderPersistentProblemWords();
+        });
+    }
+
+    function addBrief(word, stroke, button) {
+        const progress = getPersistentProgress();
+        progress.briefs[word] = { stroke };
+        savePersistentProgress(progress);
+        if (button) {
+            button.textContent = 'Done';
+            button.disabled = true;
+        }
+        renderPersistentProblemWords();
+    }
+
+    async function changePracticeStroke(listName, word, stroke) {
+        if (!stroke) return;
+        const progress = getPersistentProgress();
+        if (listName === 'briefs') progress.briefs[word] = { stroke };
+        else progress.problematic[word].stroke = stroke;
+        savePersistentProgress(progress);
+        renderPersistentProblemWords();
+    }
+
         function refreshPracticeAccuracy() {
             const totalWords = practiceState.wordUnitCounts && practiceState.wordUnitCounts.length
                 ? practiceState.wordUnitCounts.reduce((total, count) => total + count, 0)
@@ -1307,8 +1374,10 @@ if ('serviceWorker' in navigator) {
     async function renderPersistentProblemWords() {
         const list = document.getElementById('persistentProblemWords');
         if (!list) return;
-        const problematic = getPersistentProgress().problematic;
-        const words = Object.keys(problematic);
+        const listName = document.getElementById('practiceListSelect')?.value || 'problematic';
+        const progress = getPersistentProgress();
+        const entries = progress[listName] || {};
+        const words = Object.keys(entries);
         if (!words.length) {
             list.innerHTML = '<div style="color:var(--text-muted);">None yet.</div>';
             return;
@@ -1318,9 +1387,10 @@ if ('serviceWorker' in navigator) {
         const cards = [];
         for (const word of words) {
             const limits = practiceState.maxStrokesMap[word] || await getStrokeLimitsAndOutlines(word);
-            const stroke = hintType === 'longest'
+            const stroke = entries[word].stroke || (hintType === 'longest'
                 ? (limits.longest || limits.shortest || '')
-                : (limits.shortest || limits.longest || '');
+                : (limits.shortest || limits.longest || ''));
+            const choices = await getWordStrokeChoices(word);
             const strokes = stroke ? stroke.split('/') : [];
             let outline = '';
             if (stroke && profile.showDiagrams) {
@@ -1332,7 +1402,9 @@ if ('serviceWorker' in navigator) {
             } else if (stroke) {
                 outline = `<div class="raw-steno" style="margin-top:8px;">${escapeHtml(stroke)}</div>`;
             }
-            cards.push(`<div class="dict-card"><div style="width:100%;"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;"><div class="dict-name">${escapeHtml(word)}</div><div class="dict-priority">Errors: ${problematic[word].errors || 0} | Correct: ${problematic[word].correct || 0}/5</div></div>${outline}</div></div>`);
+            const strokeOptions = choices.length ? `<label class="practice-stroke-picker"><select class="profile-select" aria-label="Choose outline" onchange="changePracticeStroke('${listName}', '${escapeHtml(word).replace(/'/g, '&#39;')}', this.value)">${choices.map(choice => `<option value="${escapeHtml(choice)}" ${choice === stroke ? 'selected' : ''}>${escapeHtml(choice)}</option>`).join('')}</select></label>` : '';
+            const counter = listName === 'problematic' ? `Errors: ${entries[word].errors || 0} | Correct: ${entries[word].correct || 0}/5` : 'My Brief';
+            cards.push(`<div class="dict-card practice-list-card"><div class="practice-list-top"><div class="dict-name">${escapeHtml(word)}</div><div class="practice-list-actions">${strokeOptions}<button class="practice-remove" title="Remove from practice list" onclick="removePracticeListWord('${listName}', '${escapeHtml(word).replace(/'/g, '&#39;')}')">X</button></div></div><div style="width:100%;">${outline}<div class="practice-list-bottom"><div class="dict-priority">${counter}</div></div></div></div>`);
         }
         list.innerHTML = cards.join('');
     }
@@ -1406,9 +1478,11 @@ if ('serviceWorker' in navigator) {
             return;
         }
         document.getElementById('practiceMaterial').value = getRandomPracticeQuote(quotes, source);
-        document.getElementById('practiceMode').value = 'ordered';
+        document.getElementById('lessonSelect').value = 'custom';
+        settings.profiles[settings.activeProfile].practiceLesson = 'custom';
         document.getElementById('newQuoteButton').classList.remove('hidden');
         savePracticeSettingsForProfile();
+        updatePracticeEstimate();
     }
 
     function syncQuoteLanguageUI() {
@@ -1470,6 +1544,7 @@ if ('serviceWorker' in navigator) {
             settings.profiles[settings.activeProfile].practiceLesson = 'custom';
             settings.profiles[settings.activeProfile].practiceMaterial = material.value;
             localStorage.setItem('ploverSettings', JSON.stringify(settings));
+            updatePracticeEstimate();
         });
 
         const quoteLanguage = document.getElementById('quoteLanguage');
@@ -1479,17 +1554,29 @@ if ('serviceWorker' in navigator) {
             document.getElementById('newQuoteButton').classList.toggle('hidden', !quoteLanguage.value);
         });
 
-        ['practiceMode', 'strokeHintType', 'strokeVisibility', 'practiceRepeats', 'practiceMaxWords', 'practiceProblemWords'].forEach(id => {
+        ['practiceMode', 'strokeHintType', 'strokeVisibility', 'practiceRepeats', 'practiceMaxWords', 'practiceProblemWords', 'practiceBriefWords', 'practiceStartWord', 'practiceEndWord'].forEach(id => {
             const input = document.getElementById(id);
             if (!input) return;
             input.addEventListener('input', savePracticeSettingsForProfile);
             input.addEventListener('change', savePracticeSettingsForProfile);
+            input.addEventListener('input', updatePracticeEstimate);
+            input.addEventListener('change', updatePracticeEstimate);
         });
 
         const problematicOption = document.createElement('option');
         problematicOption.value = 'problematic';
         problematicOption.textContent = 'Problematic Words';
         select.insertBefore(problematicOption, select.options[1] || null);
+        const briefsOption = document.createElement('option');
+        briefsOption.value = 'briefs';
+        briefsOption.textContent = 'My Briefs';
+        select.insertBefore(briefsOption, select.options[2] || null);
+        document.getElementById('practiceListSelect')?.addEventListener('change', () => {
+            savePracticeSettingsForProfile();
+            renderPersistentProblemWords();
+            const clearButton = document.getElementById('clearPracticeListButton');
+            if (clearButton) clearButton.textContent = document.getElementById('practiceListSelect').value === 'briefs' ? 'Clear My Briefs' : 'Clear Problematic Words';
+        });
 
         let lessonFiles = [];
         try {
@@ -1522,6 +1609,9 @@ if ('serviceWorker' in navigator) {
         });
         syncQuoteLanguageUI();
         loadPracticeSettingsForProfile();
+        const clearButton = document.getElementById('clearPracticeListButton');
+        if (clearButton) clearButton.textContent = document.getElementById('practiceListSelect').value === 'briefs' ? 'Clear My Briefs' : 'Clear Problematic Words';
+        updatePracticeEstimate();
 
         select.addEventListener('change', async () => {
             document.getElementById('newQuoteButton').classList.add('hidden');
@@ -1535,17 +1625,23 @@ if ('serviceWorker' in navigator) {
                     openModal('Random Words Unavailable', 'Add a dictionary to the current profile before choosing random words.', () => {});
                 } else {
                     material.value = words.join(' ');
-                    document.getElementById('practiceMode').value = 'random';
                     savePracticeSettingsForProfile();
+                    updatePracticeEstimate();
                 }
                 select.disabled = false;
                 return;
             }
             if (select.value === 'problematic') {
-                const problematicWords = Object.keys(getPersistentProgress().problematic);
-                material.value = problematicWords.join(' ');
-                document.getElementById('practiceMode').value = 'ordered';
+                material.value = await getPracticeListMaterial('problematic');
                 savePracticeSettingsForProfile();
+                updatePracticeEstimate();
+                select.disabled = false;
+                return;
+            }
+            if (select.value === 'briefs') {
+                material.value = await getPracticeListMaterial('briefs');
+                savePracticeSettingsForProfile();
+                updatePracticeEstimate();
                 select.disabled = false;
                 return;
             }
@@ -1555,6 +1651,7 @@ if ('serviceWorker' in navigator) {
                 if (!response.ok) throw new Error('Lesson file unavailable.');
                 material.value = await readLessonResponse(response);
                 savePracticeSettingsForProfile();
+                updatePracticeEstimate();
             } catch (error) {
                 alert('Unable to load that lesson.');
                 select.value = 'custom';
@@ -1565,6 +1662,61 @@ if ('serviceWorker' in navigator) {
     }
 
     window.addEventListener('load', loadLessons);
+
+    async function getPracticeListMaterial(listName) {
+        const entries = getPersistentProgress()[listName] || {};
+        const lines = [];
+        for (const word of Object.keys(entries)) {
+            const entry = entries[word] || {};
+            const stroke = entry.stroke || (await getStrokeLimitsAndOutlines(word)).shortest;
+            lines.push(`${word}\t${stroke || ''}`);
+        }
+        return lines.join('\n');
+    }
+
+    function updatePracticeEstimate() {
+        const estimate = document.getElementById('practiceEstimate');
+        if (!estimate) return;
+        const material = document.getElementById('practiceMaterial')?.value || '';
+        const mode = document.getElementById('practiceMode')?.value || 'random';
+        let words = generatePracticeQueue(material, mode);
+        const repeats = Math.max(0, parseInt(document.getElementById('practiceRepeats')?.value || '0', 10) || 0);
+        if (repeats > 0) {
+            const original = words.slice();
+            for (let repeat = 0; repeat < repeats; repeat++) words = words.concat(original);
+        }
+        if (settings.profiles[settings.activeProfile].ignorePunct) {
+            words = words.filter(word => !(/^[\.,!?;:\"()\[\]{}<>]+$/).test(word));
+        }
+        const maxWords = Math.max(0, parseInt(document.getElementById('practiceMaxWords')?.value || '0', 10) || 0);
+        if (maxWords > 0) words = words.slice(0, maxWords);
+        const problemWordCount = Math.max(0, parseInt(document.getElementById('practiceProblemWords')?.value || '0', 10) || 0);
+        const problematicWords = Object.keys(getPersistentProgress().problematic);
+        for (let index = 0; index < Math.min(problemWordCount, problematicWords.length); index++) words.push(problematicWords[index]);
+        const briefWordCount = Math.max(0, parseInt(document.getElementById('practiceBriefWords')?.value || '0', 10) || 0);
+        const briefWords = Object.keys(getPersistentProgress().briefs || {});
+        for (let index = 0; index < Math.min(briefWordCount, briefWords.length); index++) words.push(briefWords[index]);
+        const start = Math.max(1, parseInt(document.getElementById('practiceStartWord')?.value || '1', 10) || 1);
+        const end = parseInt(document.getElementById('practiceEndWord')?.value || '0', 10) || 0;
+        const selectedWords = Math.max(0, Math.min(words.length, end > 0 ? end : words.length) - start + 1);
+        const sessions = getPersistentProgress().sessions;
+        const averageWpm = sessions.length ? sessions.reduce((total, session) => total + (Number(session.wpm) || 0), 0) / sessions.length : 0;
+        if (!selectedWords || !averageWpm) {
+            estimate.textContent = `Estimated time: ${selectedWords ? 'Set by completing a session' : '0:00'}`;
+            return;
+        }
+        const seconds = Math.ceil(selectedWords / averageWpm * 60);
+        estimate.textContent = `Estimated time: ${formatPracticeDuration(seconds)} at ${Math.round(averageWpm)} WPM (${selectedWords} words)`;
+    }
+
+    function formatPracticeDuration(totalSeconds) {
+        const seconds = Math.max(0, Math.ceil(totalSeconds));
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const remainingSeconds = seconds % 60;
+        if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+        return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+    }
 
     function generatePracticeQueue(rawText, mode) {
         practiceState.customDict = null;
@@ -1728,6 +1880,7 @@ if ('serviceWorker' in navigator) {
         // Max words cap: 0 means no cap
         const maxWords = parseInt(document.getElementById('practiceMaxWords') ? document.getElementById('practiceMaxWords').value : '0', 10) || 0;
         const problemWordCount = parseInt(document.getElementById('practiceProblemWords') ? document.getElementById('practiceProblemWords').value : '0', 10) || 0;
+        const briefWordCount = parseInt(document.getElementById('practiceBriefWords') ? document.getElementById('practiceBriefWords').value : '0', 10) || 0;
         if (maxWords > 0) {
             practiceState.words = practiceState.words.slice(0, maxWords);
         }
@@ -1741,6 +1894,22 @@ if ('serviceWorker' in navigator) {
                 practiceState.words.splice(position, 0, word);
             });
         }
+        const briefWords = Object.keys(getPersistentProgress().briefs || {});
+        if (briefWordCount > 0 && briefWords.length) {
+            briefWords.slice(0, briefWordCount).forEach(word => {
+                const position = Math.floor(Math.random() * (practiceState.words.length + 1));
+                practiceState.words.splice(position, 0, word);
+            });
+            const briefEntries = getPersistentProgress().briefs;
+            practiceState.customDict = Object.assign(practiceState.customDict || {}, Object.fromEntries(
+                briefWords.slice(0, briefWordCount)
+                    .filter(word => briefEntries[word]?.stroke)
+                    .map(word => [word, briefEntries[word].stroke])
+            ));
+        }
+        const startWord = Math.max(1, parseInt(document.getElementById('practiceStartWord')?.value || '1', 10) || 1);
+        const endWord = Math.max(0, parseInt(document.getElementById('practiceEndWord')?.value || '0', 10) || 0);
+        practiceState.words = practiceState.words.slice(startWord - 1, endWord > 0 ? endWord : undefined);
         if (practiceState.words.length === 0) {
             alert("Please enter valid text/format to practice.");
             return;
@@ -1785,11 +1954,8 @@ if ('serviceWorker' in navigator) {
                 : (limits.min || limits.max || 1);
             if (targetStrokes >= 2) practiceState.inefficient.add(word);
         }
-        practiceState.idleGaps = [];
-        practiceState.avgIdle = 0;
-        
         practiceState.sessionStartTime = performance.now();
-        practiceState.lastInputTime = 0;
+        practiceState.sessionStartDate = new Date();
         practiceState.lastInputValue = '';
         practiceState.lastStrokeTime = 0;
         practiceState.lastStrokeKind = '';
@@ -1823,7 +1989,6 @@ if ('serviceWorker' in navigator) {
         
         document.getElementById('liveWpm').innerText = "0";
         document.getElementById('liveAcc').innerText = "100.00%";
-        document.getElementById('liveIdle').innerText = "0.000s";
         document.getElementById('liveAvgStr').innerText = "0";
         
         document.getElementById('practiceSetup').style.display = 'none';
@@ -2231,13 +2396,6 @@ if ('serviceWorker' in navigator) {
         }
 
         if (inputVal !== previousInput) {
-            if (practiceState.lastInputTime > 0) {
-                const gap = Math.max(0, now - practiceState.lastInputTime);
-                practiceState.idleGaps.push(gap);
-                if (practiceState.idleGaps.length > 50) practiceState.idleGaps.shift();
-                practiceState.avgIdle = practiceState.idleGaps.reduce((total, value) => total + value, 0) / practiceState.idleGaps.length / 1000;
-            }
-            practiceState.lastInputTime = now;
         }
 
         if (isDeletion) {
@@ -2539,7 +2697,9 @@ if ('serviceWorker' in navigator) {
             practiceState.statsIndex = completedWordUnits;
 
         const wpm = minutes > 0 ? Math.round((practiceState.statsCorrectChars / 5) / minutes) : 0;
-        const totalPracticeWords = practiceState.wordUnitCounts.reduce((total, count) => total + count, 0);
+        const totalPracticeWords = practiceState.wordUnitCounts.length
+            ? practiceState.wordUnitCounts.reduce((total, count) => total + count, 0)
+            : practiceState.words.length;
         
         const misses = Array.from(practiceState.mistakePracticeIndices)
             .reduce((total, index) => total + wordUnitCount(index), 0);
@@ -2548,33 +2708,43 @@ if ('serviceWorker' in navigator) {
             : 100;
         
         const avgStr = practiceState.statsIndex > 0 ? (practiceState.statsTotalStrokes / practiceState.statsIndex).toFixed(2) : 0;
-        const idle = practiceState.avgIdle || 0;
-
         const liveWpm = document.getElementById('liveWpm');
         const liveAcc = document.getElementById('liveAcc');
         const liveAvgStr = document.getElementById('liveAvgStr');
-        const liveIdle = document.getElementById('liveIdle');
         const liveStreak = document.getElementById('liveStreak');
         const liveLongestStreak = document.getElementById('liveLongestStreak');
 
         if (liveWpm) liveWpm.innerText = wpm;
         if (liveAcc) liveAcc.innerText = acc.toFixed(2) + '%';
         if (liveAvgStr) liveAvgStr.innerText = avgStr;
-        if (liveIdle) liveIdle.innerText = idle.toFixed(3) + 's';
         if (liveStreak) liveStreak.innerText = practiceState.currentStreak;
         if (liveLongestStreak) liveLongestStreak.innerText = practiceState.longestStreak;
         
-        return { wpm, acc, avgStr, idle, streak: practiceState.currentStreak, longestStreak: practiceState.longestStreak };
+        const completed = Math.min(practiceState.statsIndex, totalPracticeWords);
+        const progressText = document.getElementById('liveProgressText');
+        const progressBar = document.getElementById('liveProgressBar');
+        if (progressText) progressText.innerText = `${completed} / ${totalPracticeWords}`;
+        if (progressBar) progressBar.style.width = `${totalPracticeWords ? Math.min(100, completed / totalPracticeWords * 100) : 0}%`;
+        return { wpm, acc, avgStr, streak: practiceState.currentStreak, longestStreak: practiceState.longestStreak };
     }
 
     function recordHistoryStat() {
         if (!practiceState.sessionStartTime) return;
         const stats = calculateLiveStats();
         stats.word = practiceState.words[Math.max(0, practiceState.currentIndex - 1)] || practiceState.words[practiceState.currentIndex] || '';
+        stats.typedWords = practiceState.statsIndex;
         practiceState.statsHistory.push(stats);
     }
 
     function escapeHtml(s) { return String(s).replace(/</g, '&lt;'); }
+
+    function formatSessionTooltip(session, typedWords = session.words) {
+        return `${escapeHtml(new Date(session.date).toLocaleString())}<br>${escapeHtml(session.mode)} | ${typedWords} words typed<br>WPM: ${Number(session.wpm) || 0} | Accuracy: ${(Number(session.acc) || 0).toFixed(2)}%<br>Avg strokes/word: ${(Number(session.avgStr) || 0).toFixed(2)} | Longest streak: ${Number(session.longestStreak) || 0}`;
+    }
+
+    function formatLiveTooltip(point) {
+        return `${escapeHtml(new Date(practiceState.sessionStartDate || Date.now()).toLocaleString())}<br>${escapeHtml(practiceState.mode)} | ${point.typedWords || 0} words typed<br>WPM: ${point.wpm || 0} | Accuracy: ${(Number(point.acc) || 0).toFixed(2)}%<br>Avg strokes/word: ${(Number(point.avgStr) || 0).toFixed(2)} | Longest streak: ${practiceState.longestStreak}`;
+    }
 
     function endPractice() {
         clearInterval(statsInterval);
@@ -2604,7 +2774,6 @@ if ('serviceWorker' in navigator) {
                 words: completedWords,
                 wpm: finalStats.wpm,
                 acc: Number(finalStats.acc.toFixed(2)),
-                idle: finalStats.idle,
                 avgStr: Number(finalStats.avgStr) || 0,
                 longestStreak: practiceState.longestStreak
             });
@@ -2617,7 +2786,6 @@ if ('serviceWorker' in navigator) {
         document.getElementById('resWpm').innerText = finalStats.wpm;
         document.getElementById('resAcc').innerText = finalStats.acc.toFixed(2) + "%";
         document.getElementById('resStr').innerText = finalStats.avgStr;
-        document.getElementById('resIdle').innerText = finalStats.idle.toFixed(3) + "s";
         document.getElementById('resStreak').innerText = practiceState.longestStreak;
 
         const missedEl = document.getElementById('missedWordsList');
@@ -2718,12 +2886,11 @@ if ('serviceWorker' in navigator) {
         const ctx = canvas.getContext('2d');
         const root = getComputedStyle(document.body);
         const border = root.getPropertyValue('--border').trim() || '#555555';
-        const colors = ['--stat-wpm', '--stat-acc', '--stat-str', '--stat-idle', '--stat-streak'].map(name => root.getPropertyValue(name).trim());
+        const colors = ['--stat-wpm', '--stat-acc', '--stat-str', '--stat-streak'].map(name => root.getPropertyValue(name).trim());
         const metrics = [
             { name: 'WPM', suffix: '', step: 20, fallback: 100 },
             { name: 'Accuracy', suffix: '%', step: 10, fixedMax: 100 },
             { name: 'Avg Strokes', suffix: '', step: 0.5, fallback: 2 },
-            { name: 'Idle Time', suffix: 's', step: 0.5, fallback: 2 },
             { name: 'Streak', suffix: '', step: 1, fallback: 10 },
         ];
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2786,7 +2953,6 @@ if ('serviceWorker' in navigator) {
             if (metricIndex === 0) return Number(point.wpm) || 0;
             if (metricIndex === 1) return Number(point.acc) || 0;
             if (metricIndex === 2) return Number(point.avgStr) || 0;
-            if (metricIndex === 3) return Number(point.idle) || 0;
             return Number(point.streak) || 0;
         }), 'Complete more words to draw the session graph.');
         setupGraphInteractions();
@@ -2803,7 +2969,7 @@ if ('serviceWorker' in navigator) {
         const showPointLabel = (index, clientX, clientY) => {
             const point = practiceState.statsHistory[index];
             if (!point) return;
-            label.textContent = point.word || 'Exercise point';
+            label.innerHTML = formatLiveTooltip(point);
             label.style.display = 'block';
             const rect = canvas.getBoundingClientRect();
             const wrapRect = wrap.getBoundingClientRect();
@@ -2848,7 +3014,6 @@ if ('serviceWorker' in navigator) {
             : 0;
         document.getElementById('progressWpm').textContent = sessions.length ? Math.round(average('wpm')) : '0';
         document.getElementById('progressAcc').textContent = sessions.length ? `${average('acc').toFixed(2)}%` : '100.00%';
-        document.getElementById('progressIdle').textContent = sessions.length ? `${average('idle').toFixed(3)}s` : '0.000s';
         document.getElementById('progressStr').textContent = sessions.length ? average('avgStr').toFixed(2) : '0';
         const longestStreak = sessions.length
             ? Math.max(...sessions.map(session => Number(session.longestStreak) || 0))
@@ -2858,7 +3023,6 @@ if ('serviceWorker' in navigator) {
             if (metricIndex === 0) return Number(session.wpm) || 0;
             if (metricIndex === 1) return Number(session.acc) || 0;
             if (metricIndex === 2) return Number(session.avgStr) || 0;
-            if (metricIndex === 3) return Number(session.idle) || 0;
             return Number(session.longestStreak) || 0;
         }), 'Complete a practice session to build progress.');
         if (canvas.dataset.ready) return;
@@ -2871,7 +3035,7 @@ if ('serviceWorker' in navigator) {
             const plotWidth = canvas.width - practiceGraphPadding.left - practiceGraphPadding.right;
             const index = currentSessions.length === 1 ? 0 : Math.max(0, Math.min(currentSessions.length - 1, Math.round((x - practiceGraphPadding.left) / (plotWidth / (currentSessions.length - 1)))));
             const session = currentSessions[index];
-            label.textContent = `${new Date(session.date).toLocaleString()} | ${session.mode} | ${session.words} words`;
+            label.innerHTML = formatSessionTooltip(session);
             const wrapRect = wrap.getBoundingClientRect();
             label.style.left = `${Math.max(0, event.clientX - wrapRect.left + 8)}px`;
             label.style.top = `${Math.max(0, event.clientY - wrapRect.top - 30)}px`;

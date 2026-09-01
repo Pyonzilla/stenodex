@@ -1,4 +1,4 @@
-const CACHE_NAME = 'stenodex-v5.0';
+const CACHE_NAME = 'stenodex-v5.3';
 const ASSETS = [
     './',
     './index.html',
@@ -14,10 +14,17 @@ self.addEventListener('install', (event) => {
             const response = await fetch('./index.json', { cache: 'no-cache' });
             const manifest = await response.json();
             const lessonFiles = Array.isArray(manifest) ? manifest : manifest.lessons;
-            return cache.addAll([
-                ...ASSETS,
-                ...lessonFiles.map(fileName => `./${fileName}`)
-            ]);
+            const urls = [...ASSETS, ...lessonFiles.map(fileName => `./${String(fileName).replace(/^\.\//, '')}`)];
+            await cache.addAll(ASSETS);
+            await Promise.all(urls.slice(ASSETS.length).map(async url => {
+                try {
+                    const lessonResponse = await fetch(url, { cache: 'no-cache' });
+                    if (lessonResponse.ok) await cache.put(url, lessonResponse);
+                } catch (error) {
+                    console.warn('Unable to cache lesson:', url, error);
+                }
+            }));
+            return cache;
         })
     );
     self.skipWaiting();

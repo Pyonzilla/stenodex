@@ -217,7 +217,7 @@
                 <option value="custom">Custom Material</option>
                 <option value="random-dictionary">Random from Dictionary</option>
             </select>
-            <h2 style="margin-bottom: 15px; font-size: 1.2rem;">Practice Configuration</h2>
+            <div class="practice-config-heading"><h2>Practice Configuration</h2><div id="practiceEstimate" class="practice-estimate">Estimated time: 0:00</div></div>
             <textarea id="practiceMaterial" placeholder="Paste your practice text here... Or paste Typey Type format (Word [tab] STROKE) or Plover Clippy Tape logs to practice exact outlines!"></textarea>
             <div id="quoteControls" class="quote-controls">
                 <select id="quoteLanguage" class="profile-select" aria-label="Quote language">
@@ -227,8 +227,8 @@
                 <button id="clearPracticeButton" onclick="clearPracticeMaterial()" title="Clear practice text">Clear</button>
             </div>
             
-            <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
-                <select id="practiceMode" class="profile-select" style="flex: 1; margin: 0;">
+            <div class="practice-settings-group practice-select-row">
+                <select id="practiceMode" class="profile-select">
                     <option value="random">Words in Random Order</option>
                     <option value="ordered">Words in Ordered Order</option>
                     <option value="random-pyramid">Words in Random Pyramid</option>
@@ -236,33 +236,48 @@
                     <!-- Endless Mode removed -->
                 </select>
 
-                <select id="strokeHintType" class="profile-select" style="flex: 1; margin: 0;">
+                <select id="strokeHintType" class="profile-select">
                     <option value="shortest">Target: Shortest Form</option>
                     <option value="longest">Target: Longest Form</option>
                 </select>
                 
-                <select id="strokeVisibility" class="profile-select" style="flex: 1; margin: 0;">
+                <select id="strokeVisibility" class="profile-select">
                     <option value="always">Always Show Strokes</option>
                     <option value="error">Show Strokes on Error</option>
                     <option value="hidden">Hide Strokes</option>
                 </select>
             </div>
             
-            <div style="display:flex;gap:10px;align-items:center;margin:10px 0 15px 0;flex-wrap:wrap;">
-                <div id="btnIgnoreCaps" class="practice-toggle" onclick="togglePracticeOption('ignoreCaps')">Ignore Capitalization</div>
-                <div id="btnIgnorePunct" class="practice-toggle" onclick="togglePracticeOption('ignorePunct')">Ignore Punctuation</div>
-                <div style="display:flex;align-items:center;gap:8px;">
+            <div class="practice-settings-group practice-options-row">
+                <div class="practice-number-control">
+                    <label style="font-size:0.9rem;color:var(--text-muted);">Start Word</label>
+                    <input id="practiceStartWord" type="number" min="1" value="1" style="width:72px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
+                </div>
+                <div class="practice-number-control">
+                    <label style="font-size:0.9rem;color:var(--text-muted);">End Word</label>
+                    <input id="practiceEndWord" type="number" min="0" value="0" placeholder="All" style="width:72px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
+                </div>
+                <div class="practice-number-control">
                     <label style="font-size:0.9rem;color:var(--text-muted);">Repeats</label>
                     <input id="practiceRepeats" type="number" min="0" value="0" style="width:72px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
                 </div>
-                <div style="display:flex;align-items:center;gap:8px;">
+                <div class="practice-number-control">
                     <label style="font-size:0.9rem;color:var(--text-muted);">Max Words</label>
                     <input id="practiceMaxWords" type="number" min="0" value="0" style="width:84px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
                 </div>
-                <div style="display:flex;align-items:center;gap:8px;">
+                <div class="practice-number-control">
                     <label style="font-size:0.9rem;color:var(--text-muted);">Problem Words</label>
                     <input id="practiceProblemWords" type="number" min="0" value="0" style="width:84px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
                 </div>
+                <div class="practice-number-control">
+                    <label style="font-size:0.9rem;color:var(--text-muted);">My Briefs</label>
+                    <input id="practiceBriefWords" type="number" min="0" value="0" style="width:84px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
+                </div>
+            </div>
+
+            <div class="practice-toggles-row">
+                <div id="btnIgnoreCaps" class="practice-toggle" onclick="togglePracticeOption('ignoreCaps')">Ignore Capitalization</div>
+                <div id="btnIgnorePunct" class="practice-toggle" onclick="togglePracticeOption('ignorePunct')">Ignore Punctuation</div>
             </div>
 
             <button onclick="startPractice()" style="width: 100%; font-weight: bold;">Start Practice</button>
@@ -271,7 +286,6 @@
             <div style="display:flex;gap:15px;margin-bottom:15px;flex-wrap:wrap;">
                 <div class="stat-box" style="flex:1;text-align:center;padding:12px;">WPM<br><span id="progressWpm" class="stat-wpm" style="font-size:1.8rem;">0</span></div>
                 <div class="stat-box" style="flex:1;text-align:center;padding:12px;">Accuracy<br><span id="progressAcc" class="stat-acc" style="font-size:1.8rem;">100.00%</span></div>
-                <div class="stat-box" style="flex:1;text-align:center;padding:12px;">Idle<br><span id="progressIdle" class="stat-idle" style="font-size:1.8rem;">0.000s</span></div>
                 <div class="stat-box" style="flex:1;text-align:center;padding:12px;">Avg Strokes/Word<br><span id="progressStr" class="stat-str" style="font-size:1.8rem;">0.00</span></div>
                 <div class="stat-box" style="flex:1;text-align:center;padding:12px;">Longest Streak<br><span id="progressStreak" class="stat-streak" style="font-size:1.8rem;">0</span></div>
             </div>
@@ -279,7 +293,7 @@
                 <canvas id="progressGraph" width="800" height="400" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;"></canvas>
                 <div id="progressGraphLabel" style="display:none;position:absolute;z-index:2;padding:6px 8px;background:var(--surface);color:var(--text-main);border:1px solid var(--accent);border-radius:4px;font:12px monospace;pointer-events:none;white-space:nowrap;"></div>
             </div>
-            <div class="section-title">Problematic Words</div>
+            <div class="section-title practice-list-heading"><select id="practiceListSelect" class="profile-select" aria-label="Practice list"><option value="problematic">Problematic Words</option><option value="briefs">My Briefs</option></select><button id="clearPracticeListButton" type="button" onclick="clearPracticeList()">Clear List</button></div>
             <div id="persistentProblemWords" class="dict-list"><div style="color:var(--text-muted);">None yet.</div></div>
         </div>
 
@@ -289,9 +303,9 @@
                 <div id="liveStatsBar">
                     <div class="stat-box" title="Words Per Minute">WPM: <span id="liveWpm" class="stat-wpm">0</span></div>
                     <div class="stat-box" title="Accuracy">Acc: <span id="liveAcc" class="stat-acc">100.00%</span></div>
-                    <div class="stat-box" title="Average Idle Gap; graph displays this value multiplied by 10">Idle: <span id="liveIdle" class="stat-idle">0.000s</span></div>
                     <div class="stat-box" title="Average Strokes per Word">Avg Str: <span id="liveAvgStr" class="stat-str">0.00</span></div>
                     <div class="stat-box" title="Current / Longest Correct Streak">Streak: <span id="liveStreak" class="stat-streak">0</span> / <span id="liveLongestStreak" class="stat-streak">0</span></div>
+                    <div class="stat-box practice-progress-box"><span id="liveProgressText">0 / 0</span><div class="practice-progress-track"><div id="liveProgressBar" class="practice-progress-bar"></div></div></div>
                 </div>
                 <button onclick="endPractice()" style="border-color: #ff5555; color: #ff5555; width: auto; padding: 8px 16px; z-index: 20; position: relative;">End Session</button>
             </div>
@@ -310,7 +324,6 @@
             <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
                 <div class="stat-box" style="flex: 1; text-align: center; font-size: 1rem; padding: 15px;">WPM<br><span id="resWpm" style="font-size: 2.2rem;" class="stat-wpm">0</span></div>
                 <div class="stat-box" style="flex: 1; text-align: center; font-size: 1rem; padding: 15px;">Accuracy<br><span id="resAcc" style="font-size: 2.2rem;" class="stat-acc">100.00%</span></div>
-                <div class="stat-box" style="flex: 1; text-align: center; font-size: 1rem; padding: 15px;">Idle<br><span id="resIdle" style="font-size: 2.2rem;" class="stat-idle">0.000s</span></div>
                 <div class="stat-box" style="flex: 1; text-align: center; font-size: 1rem; padding: 15px;">Avg Strokes/Word<br><span id="resStr" style="font-size: 2.2rem;" class="stat-str">0</span></div>
                 <div class="stat-box" style="flex: 1; text-align: center; font-size: 1rem; padding: 15px;">Longest Streak<br><span id="resStreak" class="stat-streak" style="font-size: 2.2rem;">0</span></div>
             </div>
