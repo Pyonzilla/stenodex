@@ -181,6 +181,28 @@
         }
         button:hover { background: var(--surface-hover); border-color: var(--accent); }
 
+        .practice-button-stack {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            width: 100%;
+            margin-top: 12px;
+        }
+
+        .practice-button-stack button {
+            width: 100%;
+        }
+
+        .practice-cap-warning {
+            color: #ffb703;
+            font-size: 0.72rem;
+            line-height: 1.3;
+            text-align: center;
+            opacity: 0.95;
+            margin: 0;
+        }
+
         /* Themes Grid */
         .theme-grid {
             display: flex;
@@ -533,7 +555,7 @@
         /* Practice Setup */
         .practice-config-heading {
             display: flex;
-            align-items: baseline;
+            align-items: center;
             justify-content: space-between;
             gap: 16px;
             margin-bottom: 15px;

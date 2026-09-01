@@ -217,7 +217,10 @@
                 <option value="custom">Custom Material</option>
                 <option value="random-dictionary">Random from Dictionary</option>
             </select>
-            <div class="practice-config-heading"><h2>Practice Configuration</h2><div id="practiceEstimate" class="practice-estimate">Estimated time: 0:00</div></div>
+            <div class="practice-config-heading">
+                <h2>Practice Configuration</h2>
+                <div id="practiceEstimate" class="practice-estimate">Estimated time: 0:00</div>
+            </div>
             <textarea id="practiceMaterial" placeholder="Paste your practice text here... Or paste Typey Type format (Word [tab] STROKE) or Plover Clippy Tape logs to practice exact outlines!"></textarea>
             <div id="quoteControls" class="quote-controls">
                 <select id="quoteLanguage" class="profile-select" aria-label="Quote language">
@@ -280,7 +283,10 @@
                 <div id="btnIgnorePunct" class="practice-toggle" onclick="togglePracticeOption('ignorePunct')">Ignore Punctuation</div>
             </div>
 
-            <button onclick="startPractice()" style="width: 100%; font-weight: bold;">Start Practice</button>
+            <div class="practice-button-stack">
+                <button onclick="startPractice()" style="width: 100%; font-weight: bold;">Start Practice</button>
+                <div id="practiceCapWarning" class="practice-cap-warning" hidden>Exercise capped at 50,000 words. It cannot go above this limit.</div>
+            </div>
 
             <div class="section-title" style="margin-top: 30px;">Progress Over Time</div>
             <div style="display:flex;gap:15px;margin-bottom:15px;flex-wrap:wrap;">

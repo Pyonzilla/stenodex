@@ -261,6 +261,7 @@ if ('serviceWorker' in navigator) {
         const practiceList = document.getElementById('practiceListSelect');
         if (practiceList) profile.practiceList = practiceList.value;
         localStorage.setItem('ploverSettings', JSON.stringify(settings));
+        updatePracticeCapWarning();
     }
 
     function loadPracticeSettingsForProfile() {
@@ -282,6 +283,7 @@ if ('serviceWorker' in navigator) {
             const input = document.getElementById(id);
             if (input && profile[key] !== undefined) input.value = profile[key];
         });
+        updatePracticeCapWarning();
     }
 
     function clearPracticeMaterial() {
@@ -586,6 +588,7 @@ if ('serviceWorker' in navigator) {
         localStorage.setItem('ploverSettings', JSON.stringify(settings));
         updatePracticeTogglesUI();
         updatePracticeEstimate();
+        updatePracticeCapWarning();
         try { renderMonkeyText(); skipHiddenPunctuationTokens(); updateMonkeyVisuals(); } catch (e) {}
     }
 
@@ -1122,6 +1125,7 @@ if ('serviceWorker' in navigator) {
 
             const card = document.createElement('div');
             card.className = 'result-card';
+            const isBrief = Boolean(getPersistentProgress().briefs[word]);
             
             let strokesHTML = '';
             for (const entry of uniqueEntries) {
@@ -1143,7 +1147,7 @@ if ('serviceWorker' in navigator) {
 
                 strokesHTML += `
                     <div class="stroke-row">
-                        <div class="stroke-action-row"><div class="raw-steno">${entry.stroke.replace(/</g, '&lt;')}</div><button class="add-brief-button" onclick="addBrief('${escapeHtml(word).replace(/'/g, '&#39;')}', '${escapeHtml(entry.stroke).replace(/'/g, '&#39;')}', this)">Add to briefs list</button></div>
+                        <div class="stroke-action-row"><div class="raw-steno">${entry.stroke.replace(/</g, '&lt;')}</div><button class="add-brief-button" onclick="addBrief(${escapeInlineJson(word)}, ${escapeInlineJson(entry.stroke)}, this)">${isBrief ? 'Done' : 'Add to briefs list'}</button></div>
                         ${graphHTML}
                     </div>
                 `;
@@ -1341,13 +1345,24 @@ if ('serviceWorker' in navigator) {
 
     function addBrief(word, stroke, button) {
         const progress = getPersistentProgress();
-        progress.briefs[word] = { stroke };
+        const isAlreadyBrief = Boolean(progress.briefs[word]);
+        if (isAlreadyBrief) delete progress.briefs[word];
+        else progress.briefs[word] = { stroke };
         savePersistentProgress(progress);
         if (button) {
-            button.textContent = 'Done';
-            button.disabled = true;
+            button.textContent = isAlreadyBrief ? 'Add to briefs list' : 'Done';
+            button.disabled = false;
         }
         renderPersistentProblemWords();
+    }
+
+    function searchPracticeWord(word) {
+        setSearchMode('word');
+        const input = document.getElementById('searchInput');
+        input.value = word;
+        switchTab('search');
+        triggerSearch();
+        input.focus();
     }
 
     async function changePracticeStroke(listName, word, stroke) {
@@ -1411,7 +1426,10 @@ if ('serviceWorker' in navigator) {
         refreshPracticeAccuracy();
     }
 
+    let persistentProblemRenderVersion = 0;
+
     async function renderPersistentProblemWords() {
+        const renderVersion = ++persistentProblemRenderVersion;
         const list = document.getElementById('persistentProblemWords');
         if (!list) return;
         const listName = document.getElementById('practiceListSelect')?.value || 'problematic';
@@ -1425,7 +1443,13 @@ if ('serviceWorker' in navigator) {
         const profile = settings.profiles[settings.activeProfile];
         const hintType = document.getElementById('strokeHintType')?.value || 'shortest';
         const cards = [];
-        const limitsByWord = await Promise.all(words.map(async word => [word, practiceState.maxStrokesMap[word] || await getStrokeLimitsAndOutlines(word)]));
+        const limitsByWord = await Promise.all(words.map(async word => {
+            const cachedLimits = practiceState.maxStrokesMap[word];
+            const hasStroke = cachedLimits && (cachedLimits.shortest || cachedLimits.longest);
+            const limits = hasStroke ? cachedLimits : await getStrokeLimitsAndOutlines(word);
+            return [word, limits];
+        }));
+        if (renderVersion !== persistentProblemRenderVersion) return;
         for (const [word, limits] of limitsByWord) {
             practiceState.maxStrokesMap[word] = limits;
             const stroke = entries[word].stroke || (hintType === 'longest'
@@ -1443,11 +1467,11 @@ if ('serviceWorker' in navigator) {
             } else if (stroke) {
                 outline = `<div class="raw-steno" style="margin-top:8px;">${escapeHtml(stroke)}</div>`;
             }
-            const strokeOptions = choices.length ? `<label class="practice-stroke-picker"><select class="profile-select" aria-label="Choose outline" onchange="changePracticeStroke('${listName}', '${escapeHtml(word).replace(/'/g, '&#39;')}', this.value)">${choices.map(choice => `<option value="${escapeHtml(choice)}" ${choice === stroke ? 'selected' : ''}>${escapeHtml(choice)}</option>`).join('')}</select></label>` : '';
+            const strokeOptions = choices.length ? `<label class="practice-stroke-picker"><select class="profile-select" aria-label="Choose outline" onchange="changePracticeStroke(${escapeInlineJson(listName)}, ${escapeInlineJson(word)}, this.value)">${choices.map(choice => `<option value="${escapeHtml(choice)}" ${choice === stroke ? 'selected' : ''}>${escapeHtml(choice)}</option>`).join('')}</select></label>` : '';
             const counter = listName === 'problematic' ? `Errors: ${entries[word].errors || 0} | Correct: ${entries[word].correct || 0}/5` : 'My Brief';
-            cards.push(`<div class="dict-card practice-list-card"><div class="practice-list-top"><div class="dict-name">${escapeHtml(word)}</div><div class="practice-list-actions">${strokeOptions}<button class="practice-remove" title="Remove from practice list" onclick="removePracticeListWord('${listName}', '${escapeHtml(word).replace(/'/g, '&#39;')}')">X</button></div></div><div style="width:100%;">${outline}<div class="practice-list-bottom"><div class="dict-priority">${counter}</div></div></div></div>`);
+            cards.push(`<div class="dict-card practice-list-card"><div class="practice-list-top"><div class="dict-name">${escapeHtml(word)}</div><div class="practice-list-actions"><button class="practice-search-word" title="Look up this word in the dictionary" onclick="searchPracticeWord(${escapeInlineJson(word)})">Search</button>${strokeOptions}<button class="practice-remove" title="Remove from practice list" onclick="removePracticeListWord(${escapeInlineJson(listName)}, ${escapeInlineJson(word)})">X</button></div></div><div style="width:100%;">${outline}<div class="practice-list-bottom"><div class="dict-priority">${counter}</div></div></div></div>`);
         }
-        list.innerHTML = cards.join('');
+        if (renderVersion === persistentProblemRenderVersion) list.innerHTML = cards.join('');
     }
 
     function switchTab(tab) {
@@ -1715,6 +1739,65 @@ if ('serviceWorker' in navigator) {
         return lines.join('\n');
     }
 
+    function getCurrentPracticeQueue() {
+        const material = document.getElementById('practiceMaterial')?.value || '';
+        const mode = document.getElementById('practiceMode')?.value || 'random';
+        let words = generatePracticeQueue(material, mode);
+        let requestedLength = words.length;
+
+        const repeats = Math.max(0, parseInt(document.getElementById('practiceRepeats')?.value || '0', 10) || 0);
+        requestedLength *= repeats + 1;
+        words = repeatPracticeWords(words, repeats);
+
+        if (settings.profiles[settings.activeProfile].ignorePunct) {
+            words = words.filter(word => !(/^[\.,!?;:"()\[\]{}<>]+$/).test(word));
+        }
+
+        const maxWords = Math.max(0, parseInt(document.getElementById('practiceMaxWords')?.value || '0', 10) || 0);
+        if (maxWords > 0) {
+            requestedLength = Math.min(requestedLength, maxWords);
+            words = words.slice(0, maxWords);
+        }
+        words = capPracticeQueue(words);
+
+        const problemWordCount = Math.max(0, parseInt(document.getElementById('practiceProblemWords')?.value || '0', 10) || 0);
+        const problematicWords = Object.keys(getPersistentProgress().problematic);
+        requestedLength += Math.min(problemWordCount, problematicWords.length);
+        for (let index = 0; index < Math.min(problemWordCount, problematicWords.length); index++) {
+            if (words.length >= MAX_PRACTICE_WORDS) break;
+            words.push(problematicWords[index]);
+        }
+
+        const briefWordCount = Math.max(0, parseInt(document.getElementById('practiceBriefWords')?.value || '0', 10) || 0);
+        const briefWords = Object.keys(getPersistentProgress().briefs || {});
+        requestedLength += Math.min(briefWordCount, briefWords.length);
+        for (let index = 0; index < Math.min(briefWordCount, briefWords.length); index++) {
+            if (words.length >= MAX_PRACTICE_WORDS) break;
+            words.push(briefWords[index]);
+        }
+        words = capPracticeQueue(words);
+
+        const start = Math.max(1, parseInt(document.getElementById('practiceStartWord')?.value || '1', 10) || 1);
+        const end = parseInt(document.getElementById('practiceEndWord')?.value || '0', 10) || 0;
+        const rangeEnd = end > 0 ? end : words.length;
+        words = words.slice(start - 1, rangeEnd);
+        const requestedRangeEnd = end > 0 ? end : requestedLength;
+        const cappedWords = capPracticeQueue(words);
+        cappedWords.requestedLength = Math.max(0, Math.min(requestedLength, requestedRangeEnd) - start + 1);
+        return cappedWords;
+    }
+
+    function updatePracticeCapWarning() {
+        const warning = document.getElementById('practiceCapWarning');
+        if (!warning) return;
+
+        const queue = getCurrentPracticeQueue();
+        const triggered = queue.requestedLength > MAX_PRACTICE_WORDS;
+
+        warning.hidden = !triggered;
+        warning.textContent = 'Exercise capped at 50,000 words. It cannot go above this limit.';
+    }
+
     function updatePracticeEstimate() {
         const estimate = document.getElementById('practiceEstimate');
         if (!estimate) return;
@@ -1722,21 +1805,27 @@ if ('serviceWorker' in navigator) {
         const mode = document.getElementById('practiceMode')?.value || 'random';
         let words = generatePracticeQueue(material, mode);
         const repeats = Math.max(0, parseInt(document.getElementById('practiceRepeats')?.value || '0', 10) || 0);
-        if (repeats > 0) {
-            const original = words.slice();
-            for (let repeat = 0; repeat < repeats; repeat++) words = words.concat(original);
-        }
+        words = repeatPracticeWords(words, repeats);
         if (settings.profiles[settings.activeProfile].ignorePunct) {
             words = words.filter(word => !(/^[\.,!?;:\"()\[\]{}<>]+$/).test(word));
         }
         const maxWords = Math.max(0, parseInt(document.getElementById('practiceMaxWords')?.value || '0', 10) || 0);
         if (maxWords > 0) words = words.slice(0, maxWords);
+        words = capPracticeQueue(words);
         const problemWordCount = Math.max(0, parseInt(document.getElementById('practiceProblemWords')?.value || '0', 10) || 0);
         const problematicWords = Object.keys(getPersistentProgress().problematic);
-        for (let index = 0; index < Math.min(problemWordCount, problematicWords.length); index++) words.push(problematicWords[index]);
+        for (let index = 0; index < Math.min(problemWordCount, problematicWords.length); index++) {
+            if (words.length >= MAX_PRACTICE_WORDS) break;
+            words.push(problematicWords[index]);
+        }
         const briefWordCount = Math.max(0, parseInt(document.getElementById('practiceBriefWords')?.value || '0', 10) || 0);
         const briefWords = Object.keys(getPersistentProgress().briefs || {});
-        for (let index = 0; index < Math.min(briefWordCount, briefWords.length); index++) words.push(briefWords[index]);
+        for (let index = 0; index < Math.min(briefWordCount, briefWords.length); index++) {
+            if (words.length >= MAX_PRACTICE_WORDS) break;
+            words.push(briefWords[index]);
+        }
+        words = capPracticeQueue(words);
+        updatePracticeCapWarning();
         const start = Math.max(1, parseInt(document.getElementById('practiceStartWord')?.value || '1', 10) || 1);
         const end = parseInt(document.getElementById('practiceEndWord')?.value || '0', 10) || 0;
         const selectedWords = Math.max(0, Math.min(words.length, end > 0 ? end : words.length) - start + 1);
@@ -1748,6 +1837,27 @@ if ('serviceWorker' in navigator) {
         }
         const seconds = Math.ceil(selectedWords / averageWpm * 60);
         estimate.textContent = `Estimated time: ${formatPracticeDuration(seconds)} at ${Math.round(averageWpm)} WPM (${selectedWords} words)`;
+    }
+
+    const MAX_PRACTICE_WORDS = 50000;
+
+    function capPracticeQueue(words) {
+        if (!Array.isArray(words)) return [];
+        return words.slice(0, MAX_PRACTICE_WORDS);
+    }
+
+    function repeatPracticeWords(words, repeats) {
+        if (!Array.isArray(words) || repeats <= 0) return capPracticeQueue(words);
+
+        const original = capPracticeQueue(words);
+        const repeated = [];
+        for (let repeat = 0; repeat < repeats; repeat++) {
+            for (const word of original) {
+                if (repeated.length >= MAX_PRACTICE_WORDS) return repeated;
+                repeated.push(word);
+            }
+        }
+        return repeated;
     }
 
     function formatPracticeDuration(totalSeconds) {
@@ -1769,7 +1879,8 @@ if ('serviceWorker' in navigator) {
         const clippyEntries = parseClippyTape(rawText);
         if (clippyEntries.length) {
             practiceState.customDict = Object.fromEntries(clippyEntries.map(entry => [entry.word, entry.stroke]));
-            return mode === 'random' ? shuffleArray(clippyEntries.map(entry => entry.word)) : clippyEntries.map(entry => entry.word);
+            const words = mode === 'random' ? shuffleArray(clippyEntries.map(entry => entry.word)) : clippyEntries.map(entry => entry.word);
+            return capPracticeQueue(words);
         }
 
         // Check for Typey Type format (Word [tab or spaces] Stroke) line by line
@@ -1809,25 +1920,31 @@ if ('serviceWorker' in navigator) {
         let queue = [];
         switch (mode) {
             case 'ordered':
-                queue = baseWords;
+                queue.push(...baseWords);
                 break;
             case 'random':
-                queue = shuffle(uniqueWords);
+                queue.push(...shuffle(uniqueWords));
                 break;
             case 'ordered-pyramid':
                 for (let i = 0; i < baseWords.length; i++) {
-                    for (let j = 0; j <= i; j++) queue.push(baseWords[j]);
+                    for (let j = 0; j <= i; j++) {
+                        if (queue.length >= MAX_PRACTICE_WORDS) return capPracticeQueue(queue);
+                        queue.push(baseWords[j]);
+                    }
                 }
                 break;
             case 'random-pyramid':
                 const shuf = shuffle(uniqueWords);
                 for (let i = 0; i < shuf.length; i++) {
-                    for (let j = 0; j <= i; j++) queue.push(shuf[j]);
+                    for (let j = 0; j <= i; j++) {
+                        if (queue.length >= MAX_PRACTICE_WORDS) return capPracticeQueue(queue);
+                        queue.push(shuf[j]);
+                    }
                 }
                 break;
             // 'endless' mode removed
         }
-        return queue;
+        return capPracticeQueue(queue);
     }
 
     function parseClippyTape(rawText) {
@@ -1909,10 +2026,7 @@ if ('serviceWorker' in navigator) {
 
         // Repeats: allow duplicating the entire text N times (default 0)
         const repeats = parseInt(document.getElementById('practiceRepeats') ? document.getElementById('practiceRepeats').value : '0', 10) || 0;
-        if (repeats > 0) {
-            const original = practiceState.words.slice();
-            for (let r = 0; r < repeats; r++) practiceState.words = practiceState.words.concat(original);
-        }
+        practiceState.words = repeatPracticeWords(practiceState.words, repeats);
 
         // If ignore punctuation is enabled, remove punctuation tokens entirely from the practice queue
         if (settings.profiles[settings.activeProfile].ignorePunct) {
@@ -1925,12 +2039,14 @@ if ('serviceWorker' in navigator) {
         if (maxWords > 0) {
             practiceState.words = practiceState.words.slice(0, maxWords);
         }
+        practiceState.words = capPracticeQueue(practiceState.words);
 
         // Inject problem words after capping the material so the requested count is added.
         const problematicWords = Object.keys(getPersistentProgress().problematic);
         if (problemWordCount > 0 && problematicWords.length) {
             const injectedWords = problematicWords.slice(0, problemWordCount);
             injectedWords.forEach(word => {
+                if (practiceState.words.length >= MAX_PRACTICE_WORDS) return;
                 const position = Math.floor(Math.random() * (practiceState.words.length + 1));
                 practiceState.words.splice(position, 0, word);
             });
@@ -1938,6 +2054,7 @@ if ('serviceWorker' in navigator) {
         const briefWords = Object.keys(getPersistentProgress().briefs || {});
         if (briefWordCount > 0 && briefWords.length) {
             briefWords.slice(0, briefWordCount).forEach(word => {
+                if (practiceState.words.length >= MAX_PRACTICE_WORDS) return;
                 const position = Math.floor(Math.random() * (practiceState.words.length + 1));
                 practiceState.words.splice(position, 0, word);
             });
@@ -1948,9 +2065,11 @@ if ('serviceWorker' in navigator) {
                     .map(word => [word, briefEntries[word].stroke])
             ));
         }
+        practiceState.words = capPracticeQueue(practiceState.words);
         const startWord = Math.max(1, parseInt(document.getElementById('practiceStartWord')?.value || '1', 10) || 1);
         const endWord = Math.max(0, parseInt(document.getElementById('practiceEndWord')?.value || '0', 10) || 0);
         practiceState.words = practiceState.words.slice(startWord - 1, endWord > 0 ? endWord : undefined);
+        practiceState.words = capPracticeQueue(practiceState.words);
         if (practiceState.words.length === 0) {
             alert("Please enter valid text/format to practice.");
             return;
@@ -2778,6 +2897,9 @@ if ('serviceWorker' in navigator) {
     }
 
     function escapeHtml(s) { return String(s).replace(/</g, '&lt;'); }
+    function escapeInlineJson(value) {
+        return JSON.stringify(String(value)).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    }
 
     function formatSessionTooltip(session, typedWords = session.words) {
         return `${escapeHtml(new Date(session.date).toLocaleString())}<br>${escapeHtml(session.mode)} | ${typedWords} words typed<br>WPM: ${Number(session.wpm) || 0} | Accuracy: ${(Number(session.acc) || 0).toFixed(2)}%<br>Avg strokes/word: ${(Number(session.avgStr) || 0).toFixed(2)} | Longest streak: ${Number(session.longestStreak) || 0}`;
