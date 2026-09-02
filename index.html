@@ -145,6 +145,7 @@
     <div class="section-title">Display & Sound Options</div>
     <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px;">
         <button onclick="toggleProfileSetting('practiceSoundFeedback')" id="btnPracticeSoundFeedback">Practice Sound</button>
+        <button onclick="toggleProfileSetting('speechEnabled')" id="btnSpeechEnabled">Speech</button>
         <button onclick="toggleProfileSetting('showDiagrams')" id="btnShowDiagrams">Diagrams</button>
         <button onclick="toggleProfileSetting('showNumberBar')" id="btnNumBar">Number Bar</button>
         <button onclick="toggleProfileSetting('extraThumbs')" id="btnExtraThumbs">Extra Thumbs</button>
@@ -279,6 +280,7 @@
             </div>
 
             <div class="practice-toggles-row">
+                <div id="btnBlindMode" class="practice-toggle" onclick="togglePracticeOption('blindMode')">Blind Mode</div>
                 <div id="btnIgnoreCaps" class="practice-toggle" onclick="togglePracticeOption('ignoreCaps')">Ignore Capitalization</div>
                 <div id="btnIgnorePunct" class="practice-toggle" onclick="togglePracticeOption('ignorePunct')">Ignore Punctuation</div>
             </div>

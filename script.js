@@ -55,6 +55,9 @@ if ('serviceWorker' in navigator) {
                 extraThumbs: settings.extraThumbs !== undefined ? settings.extraThumbs : false,
                 extraLeftCol: false,
                 practiceSoundFeedback: settings.profiles?.[i]?.audioFeedback || false,
+                speechEnabled: false,
+                speechVoice: '',
+                blindMode: false,
                 quoteLanguage: 'lessons/Random Quotes/Random Quote (English).json',
                 practiceList: 'problematic'
             };
@@ -84,6 +87,9 @@ if ('serviceWorker' in navigator) {
                     extraThumbs: false,
                     extraLeftCol: false,
                     practiceSoundFeedback: false,
+                    speechEnabled: false,
+                    speechVoice: '',
+                    blindMode: false,
                     quoteLanguage: 'lessons/Random Quotes/Random Quote (English).json',
                     practiceList: 'problematic'
                 };
@@ -96,6 +102,9 @@ if ('serviceWorker' in navigator) {
             if(settings.profiles[i].practiceSoundFeedback === undefined) {
                 settings.profiles[i].practiceSoundFeedback = settings.profiles[i].audioFeedback || false;
             }
+            if (settings.profiles[i].speechEnabled === undefined) settings.profiles[i].speechEnabled = false;
+            if (settings.profiles[i].speechVoice === undefined) settings.profiles[i].speechVoice = '';
+            if (settings.profiles[i].blindMode === undefined) settings.profiles[i].blindMode = false;
             if(settings.profiles[i].quoteLanguage === undefined) {
                 settings.profiles[i].quoteLanguage = 'lessons/Random Quotes/Random Quote (English).json';
             }
@@ -120,6 +129,9 @@ if ('serviceWorker' in navigator) {
         practiceBriefWords: localStorage.getItem('steno_practice_briefWords') || '0',
         practiceStartWord: localStorage.getItem('steno_practice_startWord') || '1',
         practiceEndWord: localStorage.getItem('steno_practice_endWord') || '0',
+        blindMode: false,
+        practiceBlindWpm: '60',
+        practiceBlindMode: 'wait',
         practiceLesson: 'custom',
         ignoreCaps: localStorage.getItem('steno_ignoreCaps') === '1',
         ignorePunct: localStorage.getItem('steno_ignorePunct') === '1'
@@ -164,6 +176,7 @@ if ('serviceWorker' in navigator) {
             playPracticeFeedback('correct');
         }
         if (key === 'showDiagrams') renderPersistentProblemWords();
+        if (key === 'speechEnabled') triggerSearch();
     }
 
     let practiceAudioContext;
@@ -247,6 +260,8 @@ if ('serviceWorker' in navigator) {
         saveSettings();
         document.getElementById('lblProfileNum').innerText = profileId;
         loadPracticeSettingsForProfile();
+        updatePracticeTogglesUI();
+        updatePracticeBlindControls();
         syncQuoteLanguageUI();
         drawPersistentProgressGraph();
         loadDictionaries(true); 
@@ -471,7 +486,7 @@ if ('serviceWorker' in navigator) {
                     practiceMaterial: '', practiceMode: 'random', practiceLesson: 'custom',
                     strokeVisibility: 'always', strokeHintType: 'shortest',
                     practiceRepeats: '0', practiceMaxWords: '0', practiceProblemWords: '0', practiceBriefWords: '0', practiceStartWord: '1', practiceEndWord: '0',
-                    ignoreCaps: false, ignorePunct: false, practiceList: 'problematic',
+                    ignoreCaps: false, ignorePunct: false, blindMode: false, speechEnabled: false, speechVoice: '', practiceList: 'problematic',
                     quoteLanguage: 'lessons/Random Quotes/Random Quote (English).json'
                 };
                 Object.entries(practiceDefaults).forEach(([key, fallback]) => {
@@ -567,7 +582,29 @@ if ('serviceWorker' in navigator) {
 
         document.getElementById('btnPracticeSoundFeedback').style.borderColor = p.practiceSoundFeedback ? 'var(--accent)' : 'var(--border)';
         document.getElementById('btnPracticeSoundFeedback').style.color = p.practiceSoundFeedback ? 'var(--text-main)' : 'var(--text-muted)';
+        const speechButton = document.getElementById('btnSpeechEnabled');
+        if (speechButton) {
+            speechButton.style.borderColor = p.speechEnabled ? 'var(--accent)' : 'var(--border)';
+            speechButton.style.color = p.speechEnabled ? 'var(--text-main)' : 'var(--text-muted)';
+        }
     }
+
+    function getSelectedSpeechVoice() {
+        const voices = window.speechSynthesis?.getVoices() || [];
+        return voices.find(voice => voice.name === settings.profiles[settings.activeProfile].speechVoice) || voices[0];
+    }
+
+    function speakPracticeText(text, rate = 1, force = false) {
+        const profile = settings.profiles[settings.activeProfile];
+        if (text === undefined || text === null || (!profile.speechEnabled && !force) || !window.speechSynthesis || !String(text).trim()) return;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(String(text));
+        const voice = getSelectedSpeechVoice();
+        if (voice) utterance.voice = voice;
+        utterance.rate = Math.max(0.1, Math.min(10, rate));
+        window.speechSynthesis.speak(utterance);
+    }
+
 
     function toggleSidebar() {
         const sidebar = document.getElementById('sidebar');
@@ -587,6 +624,7 @@ if ('serviceWorker' in navigator) {
         profile[key] = !profile[key];
         localStorage.setItem('ploverSettings', JSON.stringify(settings));
         updatePracticeTogglesUI();
+        updatePracticeBlindControls();
         updatePracticeEstimate();
         updatePracticeCapWarning();
         try { renderMonkeyText(); skipHiddenPunctuationTokens(); updateMonkeyVisuals(); } catch (e) {}
@@ -605,7 +643,19 @@ if ('serviceWorker' in navigator) {
             const btnIP = document.getElementById('btnIgnorePunct');
             if (btnIC) btnIC.classList.toggle('active', ic);
             if (btnIP) btnIP.classList.toggle('active', ip);
+            const btnBlind = document.getElementById('btnBlindMode');
+            if (btnBlind) btnBlind.classList.toggle('active', Boolean(profile.blindMode));
         } catch (e) { console.warn(e); }
+    }
+
+    function updatePracticeBlindControls() {
+        const profile = settings.profiles[settings.activeProfile];
+        const blindButton = document.getElementById('btnBlindMode');
+        if (blindButton) blindButton.classList.toggle('active', Boolean(profile.blindMode));
+        const wpm = document.getElementById('practiceBlindWpm');
+        const type = document.getElementById('practiceBlindMode');
+        if (wpm) wpm.disabled = !profile.blindMode;
+        if (type) type.disabled = !profile.blindMode;
     }
 
     // Skip over punctuation tokens when Ignore Punctuation is enabled
@@ -638,7 +688,10 @@ if ('serviceWorker' in navigator) {
     }
 
     // Initialize practice toggles UI on load
-    window.addEventListener('load', updatePracticeTogglesUI);
+    window.addEventListener('load', () => {
+        updatePracticeTogglesUI();
+        updatePracticeBlindControls();
+    });
 
     function updateKey(el, group, idx) {
         let newVal = el.textContent.trim() || ' ';
@@ -1147,13 +1200,16 @@ if ('serviceWorker' in navigator) {
 
                 strokesHTML += `
                     <div class="stroke-row">
-                        <div class="stroke-action-row"><div class="raw-steno">${entry.stroke.replace(/</g, '&lt;')}</div><button class="add-brief-button" onclick="addBrief(${escapeInlineJson(word)}, ${escapeInlineJson(entry.stroke)}, this)">${isBrief ? 'Done' : 'Add to briefs list'}</button></div>
+                        <div class="stroke-action-row"><div class="raw-steno">${entry.stroke.replace(/</g, '&lt;')}</div><button class="add-brief-button" onclick="addBrief(${escapeInlineJson(word)}, ${escapeInlineJson(entry.stroke)}, this)">${isBrief ? 'Included in briefs list' : 'Add to briefs list'}</button></div>
                         ${graphHTML}
                     </div>
                 `;
             }
 
-            card.innerHTML = `<div class="word-title">${word.replace(/</g, '&lt;')}</div>${strokesHTML}`;
+            const speechButton = settings.profiles[settings.activeProfile].speechEnabled
+                ? `<button class="speak-word-button" title="Say word aloud" onclick="speakPracticeText(${escapeInlineJson(word)})" aria-label="Say ${escapeHtml(word)}">Say It</button>`
+                : '';
+            card.innerHTML = `<div class="word-title">${word.replace(/</g, '&lt;')}${speechButton}</div>${strokesHTML}`;
             resultsEl.appendChild(card);
         }
     }
@@ -1190,6 +1246,11 @@ if ('serviceWorker' in navigator) {
         mode: 'random',
         hintType: 'shortest',
         visibility: 'always',
+        blindMode: false,
+        blindModeType: 'wait',
+        blindWpm: 60,
+        spokenPracticeIndex: -1,
+        blindTimer: 0,
         missed: new Set(),
         inefficient: new Set(),
         // endless mode removed; keep simple session flags
@@ -1350,7 +1411,7 @@ if ('serviceWorker' in navigator) {
         else progress.briefs[word] = { stroke };
         savePersistentProgress(progress);
         if (button) {
-            button.textContent = isAlreadyBrief ? 'Add to briefs list' : 'Done';
+            button.textContent = isAlreadyBrief ? 'Add to briefs list' : 'Included in briefs list';
             button.disabled = false;
         }
         renderPersistentProblemWords();
@@ -2022,6 +2083,12 @@ if ('serviceWorker' in navigator) {
         savePracticeSettingsForProfile();
 
         practiceState.isEndless = false;
+        practiceState.blindMode = Boolean(settings.profiles[settings.activeProfile].blindMode);
+        practiceState.blindModeType = 'wait';
+        practiceState.blindWpm = 60;
+        practiceState.spokenPracticeIndex = -1;
+        if (practiceState.blindTimer) clearInterval(practiceState.blindTimer);
+        practiceState.blindTimer = 0;
         practiceState.words = generatePracticeQueue(text, mode);
 
         // Repeats: allow duplicating the entire text N times (default 0)
@@ -2168,6 +2235,7 @@ if ('serviceWorker' in navigator) {
         document.getElementById('monkeyContainer').scrollTop = 0;
         
         renderMonkeyText();
+        updatePracticeBlindControls();
         
         const input = document.getElementById('practiceInput');
         input.value = "";
@@ -2181,7 +2249,12 @@ if ('serviceWorker' in navigator) {
         container.innerHTML = "";
         const ignoreCaps = practiceState.ignoreCaps;
         const ignorePunct = practiceState.ignorePunct;
+        const blindMode = practiceState.blindMode;
         const activeIndex = practiceState.currentIndex;
+        if (practiceState.words[activeIndex] && (blindMode || settings.profiles[settings.activeProfile].speechEnabled) && activeIndex !== practiceState.spokenPracticeIndex) {
+            practiceState.spokenPracticeIndex = activeIndex;
+            speakPracticeText(practiceState.words[activeIndex], 1, blindMode);
+        }
         const windowSize = 15;
         const startIndex = activeIndex;
         const endIndex = Math.min(practiceState.words.length - 1, activeIndex + windowSize - 1);
@@ -2212,6 +2285,9 @@ if ('serviceWorker' in navigator) {
                     const span = document.createElement('span');
                     span.className = 'letter';
                     span.innerText = ignoreCaps ? word[i].toLowerCase() : word[i];
+                    if (blindMode && index >= activeIndex && i >= (practiceState.typedWords[index] || '').length) {
+                        span.classList.add('blind-hidden');
+                    }
                     wordDiv.appendChild(span);
                 }
             } else {
@@ -2410,6 +2486,9 @@ if ('serviceWorker' in navigator) {
                 const span = letters[j];
                 if (!span) continue;
 
+                const typedLength = typed.length;
+                span.classList.toggle('blind-hidden', practiceState.blindMode && i >= practiceState.currentIndex && j >= typedLength);
+
                 if (j < typed.length) {
                     const typedChar = typed[j] || '';
                     const targetChar = targetWord[j] || '';
@@ -2436,6 +2515,12 @@ if ('serviceWorker' in navigator) {
 
             while(letters.length > targetWord.length) {
                 wordDiv.removeChild(letters.pop());
+            }
+
+            if (practiceState.blindMode && i >= practiceState.currentIndex) {
+                Array.from(wordDiv.children)
+                    .filter(element => !element.classList.contains('monkey-cursor'))
+                    .forEach((span, index) => span.classList.toggle('blind-hidden', index >= typed.length));
             }
 
             if (typed.length > targetWord.length) {
@@ -2911,6 +2996,10 @@ if ('serviceWorker' in navigator) {
 
     function endPractice() {
         clearInterval(statsInterval);
+        if (practiceState.blindTimer) {
+            clearInterval(practiceState.blindTimer);
+            practiceState.blindTimer = 0;
+        }
         if (practiceState.pendingEraseTimer) {
             clearTimeout(practiceState.pendingEraseTimer);
             practiceState.pendingEraseTimer = 0;

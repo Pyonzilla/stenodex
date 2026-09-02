@@ -633,6 +633,8 @@
         .practice-stroke-picker { display: inline-flex; align-items: center; }
         .practice-stroke-picker select { width: auto; max-width: 180px; margin: 0; padding: 6px 8px; }
         .add-brief-button { margin: 0 0 0 8px; color: var(--accent); border-color: var(--accent); }
+        .speak-word-button { float: right; padding: 2px 6px; font-size: 0.85rem; }
+        .monkey-word .letter.blind-hidden { visibility: hidden; }
 
         /* Monkeytype Typing UI */
         #practiceInput {
