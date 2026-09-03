@@ -223,6 +223,14 @@
                 <div id="practiceEstimate" class="practice-estimate">Estimated time: 0:00</div>
             </div>
             <textarea id="practiceMaterial" placeholder="Paste your practice text here... Or paste Typey Type format (Word [tab] STROKE) or Plover Clippy Tape logs to practice exact outlines!"></textarea>
+            <div class="saved-materials-row">
+                <input id="savedMaterialTitle" type="text" placeholder="Material title" aria-label="Saved material title">
+                <button id="saveMaterialButton" type="button" onclick="saveCustomMaterial()">Save Material</button>
+                <select id="savedMaterialSelect" class="profile-select" aria-label="Saved custom material">
+                    <option value="">Load saved material...</option>
+                </select>
+                <button id="deleteMaterialButton" type="button" onclick="deleteCustomMaterial()" title="Delete selected saved material" aria-label="Delete selected saved material">Delete</button>
+            </div>
             <div id="quoteControls" class="quote-controls">
                 <select id="quoteLanguage" class="profile-select" aria-label="Quote language">
                     <option value="">Choose quote language</option>

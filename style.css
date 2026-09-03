@@ -584,6 +584,34 @@
         }
         #practiceMaterial:focus { border-color: var(--accent); }
 
+        .saved-materials-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin: -5px 0 15px;
+        }
+        .saved-materials-row input,
+        .saved-materials-row .profile-select {
+            flex: 1 1 180px;
+            min-width: 0;
+            margin: 0;
+        }
+        .saved-materials-row input {
+            box-sizing: border-box;
+            height: 38px;
+            padding: 8px 10px;
+            background: var(--surface);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font: inherit;
+            outline: none;
+        }
+        .saved-materials-row input::placeholder { color: var(--text-muted); }
+        .saved-materials-row input:focus { border-color: var(--accent); }
+        .saved-materials-row button { white-space: nowrap; }
+
         .lesson-select {
             width: 100%;
             margin-bottom: 15px;

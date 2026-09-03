@@ -279,6 +279,77 @@ if ('serviceWorker' in navigator) {
         updatePracticeCapWarning();
     }
 
+    function getSavedMaterials(profile = settings.profiles[settings.activeProfile]) {
+        if (!Array.isArray(profile.savedMaterials)) profile.savedMaterials = [];
+        profile.savedMaterials = profile.savedMaterials.filter(material =>
+            material && typeof material.title === 'string' && typeof material.content === 'string'
+        );
+        return profile.savedMaterials;
+    }
+
+    function renderSavedMaterials() {
+        const select = document.getElementById('savedMaterialSelect');
+        if (!select) return;
+        const selectedValue = select.value;
+        const materials = getSavedMaterials();
+        select.innerHTML = '<option value="">Load saved material...</option>';
+        materials.forEach((material, index) => {
+            const option = document.createElement('option');
+            option.value = String(index);
+            option.textContent = material.title;
+            select.appendChild(option);
+        });
+        if (materials[selectedValue]) select.value = selectedValue;
+        document.getElementById('deleteMaterialButton').disabled = !select.value;
+    }
+
+    function resetSavedMaterialSelection() {
+        const select = document.getElementById('savedMaterialSelect');
+        if (!select) return;
+        select.value = '';
+        document.getElementById('deleteMaterialButton').disabled = true;
+    }
+
+    function saveCustomMaterial() {
+        const titleInput = document.getElementById('savedMaterialTitle');
+        const materialInput = document.getElementById('practiceMaterial');
+        const title = titleInput.value.trim();
+        const content = materialInput.value;
+        if (!title || !content.trim()) {
+            openModal('Cannot Save Material', 'Enter a title and some practice material first.', () => {});
+            return;
+        }
+        const materials = getSavedMaterials();
+        const existingIndex = materials.findIndex(material => material.title.toLowerCase() === title.toLowerCase());
+        const material = { title, content };
+        if (existingIndex >= 0) materials[existingIndex] = material;
+        else materials.push(material);
+        localStorage.setItem('ploverSettings', JSON.stringify(settings));
+        renderSavedMaterials();
+        document.getElementById('savedMaterialSelect').value = String(existingIndex >= 0 ? existingIndex : materials.length - 1);
+        document.getElementById('deleteMaterialButton').disabled = false;
+    }
+
+    function deleteCustomMaterial() {
+        const select = document.getElementById('savedMaterialSelect');
+        const index = Number(select?.value);
+        const materials = getSavedMaterials();
+        if (!Number.isInteger(index) || !materials[index]) return;
+        materials.splice(index, 1);
+        localStorage.setItem('ploverSettings', JSON.stringify(settings));
+        renderSavedMaterials();
+    }
+
+    function loadSavedMaterial(index) {
+        const material = getSavedMaterials()[Number(index)];
+        if (!material) return;
+        document.getElementById('practiceMaterial').value = material.content;
+        document.getElementById('savedMaterialTitle').value = material.title;
+        document.getElementById('lessonSelect').value = 'custom';
+        savePracticeSettingsForProfile();
+        updatePracticeEstimate();
+    }
+
     function loadPracticeSettingsForProfile() {
         const profile = settings.profiles[settings.activeProfile];
         Object.entries({
@@ -298,11 +369,16 @@ if ('serviceWorker' in navigator) {
             const input = document.getElementById(id);
             if (input && profile[key] !== undefined) input.value = profile[key];
         });
+        const savedMaterialTitle = document.getElementById('savedMaterialTitle');
+        if (savedMaterialTitle) savedMaterialTitle.value = '';
+        resetSavedMaterialSelection();
+        renderSavedMaterials();
         updatePracticeCapWarning();
     }
 
     function clearPracticeMaterial() {
         document.getElementById('practiceMaterial').value = '';
+        resetSavedMaterialSelection();
         document.getElementById('lessonSelect').value = 'custom';
         document.getElementById('newQuoteButton').classList.add('hidden');
         savePracticeSettingsForProfile();
@@ -487,7 +563,7 @@ if ('serviceWorker' in navigator) {
                     strokeVisibility: 'always', strokeHintType: 'shortest',
                     practiceRepeats: '0', practiceMaxWords: '0', practiceProblemWords: '0', practiceBriefWords: '0', practiceStartWord: '1', practiceEndWord: '0',
                     ignoreCaps: false, ignorePunct: false, blindMode: false, speechEnabled: false, speechVoice: '', practiceList: 'problematic',
-                    quoteLanguage: 'lessons/Random Quotes/Random Quote (English).json'
+                    quoteLanguage: 'lessons/Random Quotes/Random Quote (English).json', savedMaterials: []
                 };
                 Object.entries(practiceDefaults).forEach(([key, fallback]) => {
                     if (importedProfile[key] === undefined) importedProfile[key] = fallback;
@@ -1602,6 +1678,7 @@ if ('serviceWorker' in navigator) {
             openModal('Random Quote Unavailable', 'The quote file could not be loaded.', () => {});
             return;
         }
+        resetSavedMaterialSelection();
         document.getElementById('practiceMaterial').value = getRandomPracticeQuote(quotes, source);
         document.getElementById('lessonSelect').value = 'custom';
         settings.profiles[settings.activeProfile].practiceLesson = 'custom';
@@ -1664,6 +1741,7 @@ if ('serviceWorker' in navigator) {
         const fallbackLessonFiles = [];
 
         material.addEventListener('input', () => {
+            resetSavedMaterialSelection();
             if (select.value !== 'custom') select.value = 'custom';
             document.getElementById('newQuoteButton').classList.add('hidden');
             settings.profiles[settings.activeProfile].practiceLesson = 'custom';
@@ -1734,11 +1812,16 @@ if ('serviceWorker' in navigator) {
         });
         syncQuoteLanguageUI();
         loadPracticeSettingsForProfile();
+        document.getElementById('savedMaterialSelect')?.addEventListener('change', event => {
+            if (event.target.value !== '') loadSavedMaterial(event.target.value);
+            renderSavedMaterials();
+        });
         const clearButton = document.getElementById('clearPracticeListButton');
         if (clearButton) clearButton.textContent = document.getElementById('practiceListSelect').value === 'briefs' ? 'Clear My Briefs' : 'Clear Problematic Words';
         updatePracticeEstimate();
 
         select.addEventListener('change', async () => {
+            resetSavedMaterialSelection();
             document.getElementById('newQuoteButton').classList.add('hidden');
             settings.profiles[settings.activeProfile].practiceLesson = select.value;
             savePracticeSettingsForProfile();
