@@ -1,4 +1,4 @@
-# StenoDex V6.4
+# StenoDex V6.5
 https://pyonzilla.github.io/stenodex/
 
 Web app for searching, visualizing and practicing Plover's custom stenography dictionaries.
@@ -14,6 +14,7 @@ Web app for searching, visualizing and practicing Plover's custom stenography di
 * Keep track of your problematic words and a list of your briefs, that way you can isolate tricky words and finaly learn them.
 * Set repetitions, word ranges, maximum words, and include problematic words or your briefs into your practice material.
 * Import and export profile settings and practice data (please backup your progress and settings regularly).
+* Save custom study material for future use.
 
 * All data parsing and storage is handled locally on your device.
 
