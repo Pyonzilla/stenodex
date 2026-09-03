@@ -293,13 +293,19 @@ if ('serviceWorker' in navigator) {
         const selectedValue = select.value;
         const materials = getSavedMaterials();
         select.innerHTML = '<option value="">Load saved material...</option>';
+        [['problematic', 'Problematic Words'], ['briefs', 'My Briefs']].forEach(([value, label]) => {
+            const option = document.createElement('option');
+            option.value = `list:${value}`;
+            option.textContent = label;
+            select.appendChild(option);
+        });
         materials.forEach((material, index) => {
             const option = document.createElement('option');
-            option.value = String(index);
+            option.value = `saved:${index}`;
             option.textContent = material.title;
             select.appendChild(option);
         });
-        if (materials[selectedValue]) select.value = selectedValue;
+        if (Array.from(select.options).some(option => option.value === selectedValue)) select.value = selectedValue;
         document.getElementById('deleteMaterialButton').disabled = !select.value;
     }
 
@@ -310,6 +316,38 @@ if ('serviceWorker' in navigator) {
         document.getElementById('deleteMaterialButton').disabled = true;
     }
 
+    function clearSavedMaterialTitle() {
+        const title = document.getElementById('savedMaterialTitle');
+        if (title) title.value = '';
+    }
+
+    function parseSavedListMaterial(content) {
+        const entries = [];
+        const lines = String(content).split(/\r?\n/);
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            const parts = trimmed.split(/\t+|\s{2,}/);
+            const word = parts[0].trim();
+            if (!word) continue;
+            entries.push({ word, stroke: parts[1]?.trim() || '' });
+        }
+        if (entries.length) return entries;
+        return (content.match(/[\w'-]+/g) || []).map(word => ({ word, stroke: '' }));
+    }
+
+    function updatePracticeListFromMaterial(listName, content) {
+        const entries = parseSavedListMaterial(content);
+        if (!entries.length) return false;
+        const progress = getPersistentProgress();
+        progress[listName] = Object.fromEntries(entries.map(({ word, stroke }) => [word,
+            listName === 'briefs' ? { stroke } : { errors: 0, correct: 0, stroke }
+        ]));
+        savePersistentProgress(progress);
+        renderPersistentProblemWords();
+        return true;
+    }
+
     function saveCustomMaterial() {
         const titleInput = document.getElementById('savedMaterialTitle');
         const materialInput = document.getElementById('practiceMaterial');
@@ -317,6 +355,19 @@ if ('serviceWorker' in navigator) {
         const content = materialInput.value;
         if (!title || !content.trim()) {
             openModal('Cannot Save Material', 'Enter a title and some practice material first.', () => {});
+            return;
+        }
+        const listName = title.toLowerCase() === 'problematic words'
+            ? 'problematic'
+            : title.toLowerCase() === 'my briefs' ? 'briefs' : '';
+        if (listName && !updatePracticeListFromMaterial(listName, content)) {
+            openModal('Cannot Update List', 'Enter at least one word before saving this list.', () => {});
+            return;
+        }
+        if (listName) {
+            resetSavedMaterialSelection();
+            document.getElementById('savedMaterialSelect').value = `list:${listName}`;
+            document.getElementById('deleteMaterialButton').disabled = true;
             return;
         }
         const materials = getSavedMaterials();
@@ -332,7 +383,8 @@ if ('serviceWorker' in navigator) {
 
     function deleteCustomMaterial() {
         const select = document.getElementById('savedMaterialSelect');
-        const index = Number(select?.value);
+        if (!select?.value.startsWith('saved:')) return;
+        const index = Number(select.value.slice(6));
         const materials = getSavedMaterials();
         if (!Number.isInteger(index) || !materials[index]) return;
         materials.splice(index, 1);
@@ -341,7 +393,18 @@ if ('serviceWorker' in navigator) {
     }
 
     function loadSavedMaterial(index) {
-        const material = getSavedMaterials()[Number(index)];
+        if (String(index).startsWith('list:')) {
+            const listName = String(index).slice(5);
+            getPracticeListMaterial(listName).then(content => {
+                document.getElementById('practiceMaterial').value = content;
+                document.getElementById('savedMaterialTitle').value = listName === 'briefs' ? 'My Briefs' : 'Problematic Words';
+                document.getElementById('lessonSelect').value = 'custom';
+                savePracticeSettingsForProfile();
+                updatePracticeEstimate();
+            });
+            return;
+        }
+        const material = getSavedMaterials()[Number(String(index).replace(/^saved:/, ''))];
         if (!material) return;
         document.getElementById('practiceMaterial').value = material.content;
         document.getElementById('savedMaterialTitle').value = material.title;
@@ -369,8 +432,7 @@ if ('serviceWorker' in navigator) {
             const input = document.getElementById(id);
             if (input && profile[key] !== undefined) input.value = profile[key];
         });
-        const savedMaterialTitle = document.getElementById('savedMaterialTitle');
-        if (savedMaterialTitle) savedMaterialTitle.value = '';
+        clearSavedMaterialTitle();
         resetSavedMaterialSelection();
         renderSavedMaterials();
         updatePracticeCapWarning();
@@ -378,6 +440,7 @@ if ('serviceWorker' in navigator) {
 
     function clearPracticeMaterial() {
         document.getElementById('practiceMaterial').value = '';
+        clearSavedMaterialTitle();
         resetSavedMaterialSelection();
         document.getElementById('lessonSelect').value = 'custom';
         document.getElementById('newQuoteButton').classList.add('hidden');
@@ -1679,6 +1742,7 @@ if ('serviceWorker' in navigator) {
             return;
         }
         resetSavedMaterialSelection();
+        clearSavedMaterialTitle();
         document.getElementById('practiceMaterial').value = getRandomPracticeQuote(quotes, source);
         document.getElementById('lessonSelect').value = 'custom';
         settings.profiles[settings.activeProfile].practiceLesson = 'custom';
@@ -1822,6 +1886,7 @@ if ('serviceWorker' in navigator) {
 
         select.addEventListener('change', async () => {
             resetSavedMaterialSelection();
+            clearSavedMaterialTitle();
             document.getElementById('newQuoteButton').classList.add('hidden');
             settings.profiles[settings.activeProfile].practiceLesson = select.value;
             savePracticeSettingsForProfile();
