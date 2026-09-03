@@ -1266,6 +1266,7 @@ if ('serviceWorker' in navigator) {
         strokeTypingWindow: 100,
         lastCheckedInput: '',
         pendingSnapshotTimer: 0,
+        pendingSnapshotInputType: '',
         pendingEraseTimer: 0,
         statsHistory: [],
         graphSelectedIndex: -1,
@@ -1279,8 +1280,6 @@ if ('serviceWorker' in navigator) {
         renderedStart: 0,
         renderedEnd: -1,
         logicalInput: '',
-        pendingDeleteCount: 0,
-        pendingDeleteTimer: 0,
         replacementBurstTimer: 0,
         replacementIndex: -1,
         reportedPracticeIndices: new Set()
@@ -1823,18 +1822,20 @@ if ('serviceWorker' in navigator) {
 
         const problemWordCount = Math.max(0, parseInt(document.getElementById('practiceProblemWords')?.value || '0', 10) || 0);
         const problematicWords = Object.keys(getPersistentProgress().problematic);
-        requestedLength += Math.min(problemWordCount, problematicWords.length);
-        for (let index = 0; index < Math.min(problemWordCount, problematicWords.length); index++) {
+        const injectedProblemWords = getRandomPracticeListWords(problematicWords, problemWordCount);
+        requestedLength += injectedProblemWords.length;
+        for (const word of injectedProblemWords) {
             if (words.length >= MAX_PRACTICE_WORDS) break;
-            words.push(problematicWords[index]);
+            words.push(word);
         }
 
         const briefWordCount = Math.max(0, parseInt(document.getElementById('practiceBriefWords')?.value || '0', 10) || 0);
         const briefWords = Object.keys(getPersistentProgress().briefs || {});
-        requestedLength += Math.min(briefWordCount, briefWords.length);
-        for (let index = 0; index < Math.min(briefWordCount, briefWords.length); index++) {
+        const injectedBriefWords = getRandomPracticeListWords(briefWords, briefWordCount);
+        requestedLength += injectedBriefWords.length;
+        for (const word of injectedBriefWords) {
             if (words.length >= MAX_PRACTICE_WORDS) break;
-            words.push(briefWords[index]);
+            words.push(word);
         }
         words = capPracticeQueue(words);
 
@@ -1875,15 +1876,15 @@ if ('serviceWorker' in navigator) {
         words = capPracticeQueue(words);
         const problemWordCount = Math.max(0, parseInt(document.getElementById('practiceProblemWords')?.value || '0', 10) || 0);
         const problematicWords = Object.keys(getPersistentProgress().problematic);
-        for (let index = 0; index < Math.min(problemWordCount, problematicWords.length); index++) {
+        for (const word of getRandomPracticeListWords(problematicWords, problemWordCount)) {
             if (words.length >= MAX_PRACTICE_WORDS) break;
-            words.push(problematicWords[index]);
+            words.push(word);
         }
         const briefWordCount = Math.max(0, parseInt(document.getElementById('practiceBriefWords')?.value || '0', 10) || 0);
         const briefWords = Object.keys(getPersistentProgress().briefs || {});
-        for (let index = 0; index < Math.min(briefWordCount, briefWords.length); index++) {
+        for (const word of getRandomPracticeListWords(briefWords, briefWordCount)) {
             if (words.length >= MAX_PRACTICE_WORDS) break;
-            words.push(briefWords[index]);
+            words.push(word);
         }
         words = capPracticeQueue(words);
         updatePracticeCapWarning();
@@ -1905,6 +1906,11 @@ if ('serviceWorker' in navigator) {
     function capPracticeQueue(words) {
         if (!Array.isArray(words)) return [];
         return words.slice(0, MAX_PRACTICE_WORDS);
+    }
+
+    function getRandomPracticeListWords(list, count) {
+        if (!Array.isArray(list) || list.length === 0 || count <= 0) return [];
+        return Array.from({ length: count }, () => list[Math.floor(Math.random() * list.length)]);
     }
 
     function repeatPracticeWords(words, repeats) {
@@ -2111,7 +2117,7 @@ if ('serviceWorker' in navigator) {
         // Inject problem words after capping the material so the requested count is added.
         const problematicWords = Object.keys(getPersistentProgress().problematic);
         if (problemWordCount > 0 && problematicWords.length) {
-            const injectedWords = problematicWords.slice(0, problemWordCount);
+            const injectedWords = getRandomPracticeListWords(problematicWords, problemWordCount);
             injectedWords.forEach(word => {
                 if (practiceState.words.length >= MAX_PRACTICE_WORDS) return;
                 const position = Math.floor(Math.random() * (practiceState.words.length + 1));
@@ -2120,14 +2126,15 @@ if ('serviceWorker' in navigator) {
         }
         const briefWords = Object.keys(getPersistentProgress().briefs || {});
         if (briefWordCount > 0 && briefWords.length) {
-            briefWords.slice(0, briefWordCount).forEach(word => {
+            const injectedBriefWords = getRandomPracticeListWords(briefWords, briefWordCount);
+            injectedBriefWords.forEach(word => {
                 if (practiceState.words.length >= MAX_PRACTICE_WORDS) return;
                 const position = Math.floor(Math.random() * (practiceState.words.length + 1));
                 practiceState.words.splice(position, 0, word);
             });
             const briefEntries = getPersistentProgress().briefs;
             practiceState.customDict = Object.assign(practiceState.customDict || {}, Object.fromEntries(
-                briefWords.slice(0, briefWordCount)
+                injectedBriefWords
                     .filter(word => briefEntries[word]?.stroke)
                     .map(word => [word, briefEntries[word].stroke])
             ));
@@ -2181,7 +2188,7 @@ if ('serviceWorker' in navigator) {
                 : (limits.min || limits.max || 1);
             if (targetStrokes >= 2) practiceState.inefficient.add(word);
         }
-        practiceState.sessionStartTime = performance.now();
+        practiceState.sessionStartTime = 0;
         practiceState.sessionStartDate = new Date();
         practiceState.lastInputValue = '';
         practiceState.lastStrokeTime = 0;
@@ -2189,6 +2196,7 @@ if ('serviceWorker' in navigator) {
         practiceState.lastCheckedInput = '';
         if (practiceState.pendingSnapshotTimer) clearTimeout(practiceState.pendingSnapshotTimer);
         practiceState.pendingSnapshotTimer = 0;
+        practiceState.pendingSnapshotInputType = '';
         if (practiceState.pendingEraseTimer) clearTimeout(practiceState.pendingEraseTimer);
         practiceState.pendingEraseTimer = 0;
         practiceState.statsHistory = [];
@@ -2201,9 +2209,6 @@ if ('serviceWorker' in navigator) {
         practiceState.renderedStart = 0;
         practiceState.renderedEnd = -1;
         practiceState.logicalInput = '';
-        practiceState.pendingDeleteCount = 0;
-        if (practiceState.pendingDeleteTimer) clearTimeout(practiceState.pendingDeleteTimer);
-        practiceState.pendingDeleteTimer = 0;
         if (practiceState.replacementBurstTimer) clearTimeout(practiceState.replacementBurstTimer);
         practiceState.replacementBurstTimer = 0;
         practiceState.replacementIndex = -1;
@@ -2221,6 +2226,7 @@ if ('serviceWorker' in navigator) {
         document.getElementById('practiceSetup').style.display = 'none';
         document.getElementById('practiceResults').style.display = 'none';
         document.getElementById('practiceArena').style.display = 'flex';
+        calculateLiveStats();
 
         if (practiceScrollFrame) cancelAnimationFrame(practiceScrollFrame);
         practiceScrollFrame = 0;
@@ -2611,11 +2617,29 @@ if ('serviceWorker' in navigator) {
         practiceState.pendingSnapshotTimer = setTimeout(() => {
             practiceState.pendingSnapshotTimer = 0;
             const liveInput = document.getElementById('practiceInput');
-            const snapshot = liveInput.value;
-            if (!snapshot.trim()) return;
-            handleTyping({ inputType: 'insertText', data: null }, true);
-            if (liveInput.value.trim()) schedulePracticeSnapshotCheck();
-        }, 80);
+            handleTyping({ inputType: practiceState.pendingSnapshotInputType || 'insertText', data: null }, true);
+            practiceState.pendingSnapshotInputType = '';
+        }, 100);
+    }
+
+    function countPracticeStroke() {
+        const strokeTarget = practiceState.words[practiceState.currentIndex];
+        if (!strokeTarget) return;
+        const strokeLimits = practiceState.maxStrokesMap[strokeTarget] || {min: 1, max: 1};
+        practiceState.strokeCounts[practiceState.currentIndex] =
+            (practiceState.strokeCounts[practiceState.currentIndex] || 0) + 1;
+
+        const strokeTargetLimit = practiceState.hintType === 'longest'
+            ? (strokeLimits.max || strokeLimits.min || 1)
+            : (strokeLimits.max || strokeLimits.min || 1);
+        if ((practiceState.strokeCounts[practiceState.currentIndex] || 0) > strokeTargetLimit) {
+            if (!practiceState.mistakePracticeIndices.has(practiceState.currentIndex)) {
+                practiceState.mistakePracticeIndices.add(practiceState.currentIndex);
+                practiceState.currentStreak = 0;
+                playPracticeFeedback('miss');
+                refreshPracticeAccuracy();
+            }
+        }
     }
 
     function handleTyping(event, forceSnapshot = false) {
@@ -2631,10 +2655,16 @@ if ('serviceWorker' in navigator) {
         const deletedSpace = isDeletion && /\s$/.test(previousInput);
         const strokeKind = isDeletion ? 'delete' : 'insert';
         const isStrokeChange = inputVal !== previousInput && (isInsertion || isDeletion) && !insertedSpace && !deletedSpace;
+        const isDeleteChange = isDeletion && inputVal !== previousInput;
+
+        if (!practiceState.sessionStartTime && isInsertion && inputVal.trim()) {
+            practiceState.sessionStartTime = now;
+        }
 
         if (isInsertion && inputVal.trim() && !forceSnapshot) {
             practiceState.logicalInput = inputVal;
             practiceState.lastInputValue = inputVal;
+            practiceState.pendingSnapshotInputType = 'insertText';
             schedulePracticeSnapshotCheck();
             schedulePracticeVisualUpdate();
             return;
@@ -2643,33 +2673,27 @@ if ('serviceWorker' in navigator) {
         if (inputVal !== previousInput) {
         }
 
+        if (forceSnapshot && inputVal !== practiceState.lastCheckedInput) {
+            countPracticeStroke();
+            practiceState.lastCheckedInput = inputVal;
+        }
+
         if (isDeletion) {
-            practiceState.pendingDeleteCount++;
+            practiceState.logicalInput = inputVal;
+            if (practiceState.currentIndex < practiceState.words.length) {
+                practiceState.typedWords[practiceState.currentIndex] = inputVal;
+                practiceState.mismatchIndex = -1;
+                practiceState.extraTypedWords = [];
+            }
             practiceState.lastInputValue = inputVal;
-            if (practiceState.pendingDeleteTimer) clearTimeout(practiceState.pendingDeleteTimer);
-            practiceState.pendingDeleteTimer = setTimeout(() => {
-                const liveInput = document.getElementById('practiceInput');
-                const deletedValue = liveInput.value;
-                practiceState.logicalInput = deletedValue;
-                if (practiceState.currentIndex < practiceState.words.length) {
-                    // Backspace only updates the visual; it does NOT register as a miss.
-                    practiceState.typedWords[practiceState.currentIndex] = practiceState.logicalInput;
-                    practiceState.mismatchIndex = -1;
-                    practiceState.extraTypedWords = [];
-                }
-                practiceState.lastInputValue = practiceState.logicalInput;
-                schedulePracticeVisualUpdate();
-                practiceState.pendingDeleteCount = 0;
-                practiceState.pendingDeleteTimer = 0;
-            }, 80);
+            if (!forceSnapshot) {
+                practiceState.pendingSnapshotInputType = 'deleteContentBackward';
+                schedulePracticeSnapshotCheck();
+            }
+            schedulePracticeVisualUpdate();
             return;
         }
 
-        if (practiceState.pendingDeleteCount > 0) {
-            if (practiceState.pendingDeleteTimer) clearTimeout(practiceState.pendingDeleteTimer);
-            practiceState.pendingDeleteCount = 0;
-            practiceState.pendingDeleteTimer = 0;
-        }
         practiceState.logicalInput = inputVal;
 
         if (isInsertion && inputVal.trim() === '' && inputVal.length > 0) {
@@ -2681,28 +2705,6 @@ if ('serviceWorker' in navigator) {
         if (isInsertion && practiceState.pendingEraseTimer) {
             clearTimeout(practiceState.pendingEraseTimer);
             practiceState.pendingEraseTimer = 0;
-        }
-
-        if (forceSnapshot && inputVal !== practiceState.lastCheckedInput) {
-            const strokeTarget = practiceState.words[practiceState.currentIndex];
-            const strokeLimits = practiceState.maxStrokesMap[strokeTarget] || {min: 1, max: 1};
-            practiceState.strokeCounts[practiceState.currentIndex] =
-                (practiceState.strokeCounts[practiceState.currentIndex] || 0) + 1;
-            practiceState.lastCheckedInput = inputVal;
-            {
-                // Use the MAX stroke count so multi-stroke words only error when you exceed their maximum.
-                const strokeTargetLimit = practiceState.hintType === 'longest'
-                    ? (strokeLimits.max || strokeLimits.min || 1)
-                    : (strokeLimits.max || strokeLimits.min || 1);
-                if ((practiceState.strokeCounts[practiceState.currentIndex] || 0) > strokeTargetLimit) {
-                    if (!practiceState.mistakePracticeIndices.has(practiceState.currentIndex)) {
-                        practiceState.mistakePracticeIndices.add(practiceState.currentIndex);
-                        practiceState.currentStreak = 0;
-                        playPracticeFeedback('miss');
-                        refreshPracticeAccuracy();
-                    }
-                }
-            }
         }
 
         practiceState.lastInputValue = inputVal;
@@ -2923,7 +2925,7 @@ if ('serviceWorker' in navigator) {
 
         function calculateLiveStats() {
         const now = performance.now();
-        const minutes = (now - practiceState.sessionStartTime) / 60000;
+            const minutes = practiceState.sessionStartTime ? (now - practiceState.sessionStartTime) / 60000 : 0;
         
             const completedItems = Math.min(practiceState.currentIndex, practiceState.words.length);
             const wordUnitCount = index => practiceState.wordUnitCounts[index] || 1;
