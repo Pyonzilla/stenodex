@@ -1573,25 +1573,43 @@ if ('serviceWorker' in navigator) {
         renderPersistentProblemWords();
     }
 
-        function refreshPracticeAccuracy() {
-            const totalWords = practiceState.wordUnitCounts && practiceState.wordUnitCounts.length
-                ? practiceState.wordUnitCounts.reduce((total, count) => total + count, 0)
-                : (practiceState.words ? practiceState.words.length : 0);
-        if (totalWords === 0) {
-            const liveAccuracy = document.getElementById('liveAcc');
-            if (liveAccuracy) liveAccuracy.innerText = '100.00%';
-            return 100;
-        }
-
-        const misses = Array.from(practiceState.mistakePracticeIndices).reduce((total, index) => {
+    function getPracticeAccuracy() {
+        const attemptedIndices = new Set([
+            ...practiceState.correctPracticeIndices,
+            ...practiceState.mistakePracticeIndices
+        ]);
+        const attemptedWords = Array.from(attemptedIndices).reduce((total, index) => {
             return total + (practiceState.wordUnitCounts[index] || 1);
         }, 0);
-        const accuracy = Math.max(0, 100 - (misses / totalWords) * 100);
+        if (attemptedWords === 0) return 0;
+
+        const correctWords = Array.from(practiceState.correctPracticeIndices).reduce((total, index) => {
+            return total + (practiceState.wordUnitCounts[index] || 1);
+        }, 0);
+        return (correctWords / attemptedWords) * 100;
+    }
+
+    function refreshPracticeAccuracy() {
+        const accuracy = getPracticeAccuracy();
         
         const liveAccuracy = document.getElementById('liveAcc');
         if (liveAccuracy) liveAccuracy.innerText = accuracy.toFixed(2) + '%';
         
         return accuracy;
+    }
+
+    function recordPracticeMistake(index) {
+        const word = practiceState.words[index];
+        const limits = practiceState.maxStrokesMap[word] || { min: 1, max: 1 };
+        const targetStrokes = practiceState.hintType === 'longest'
+            ? (limits.max || limits.min || 1)
+            : (limits.min || limits.max || 1);
+        if ((practiceState.strokeCounts[index] || 0) <= targetStrokes) return;
+        if (practiceState.correctPracticeIndices.has(index) || practiceState.mistakePracticeIndices.has(index)) return;
+        practiceState.mistakePracticeIndices.add(index);
+        practiceState.currentStreak = 0;
+        playPracticeFeedback('miss');
+        refreshPracticeAccuracy();
     }
 
     function recordCompletedPracticeWord(index, typedValue) {
@@ -1600,13 +1618,15 @@ if ('serviceWorker' in navigator) {
 
         const word = practiceState.words[index];
         const typed = typedValue || '';
-        const normalizedTyped = normalizeForComparison(typed);
-        const normalizedWord = practiceState.normalizedWords[index] || normalizeForComparison(word);
-        // A miss is ONLY a wrong word — stroke count errors are handled separately in handleTyping.
-        const missed = normalizedTyped !== normalizedWord;
+        const wasAlreadyMissed = practiceState.mistakePracticeIndices.has(index);
+        const limits = practiceState.maxStrokesMap[word] || { min: 1, max: 1 };
+        const targetStrokes = practiceState.hintType === 'longest'
+            ? (limits.max || limits.min || 1)
+            : (limits.min || limits.max || 1);
+        const missed = wasAlreadyMissed || (practiceState.strokeCounts[index] || 0) > targetStrokes;
         if (missed) {
             practiceState.eraseErrorWords.add(word);
-            registerProblemPracticeWord(word);
+            if (!wasAlreadyMissed) registerProblemPracticeWord(word);
             practiceState.currentStreak = 0;
         } else {
             registerCorrectPracticeWord(word);
@@ -1617,10 +1637,7 @@ if ('serviceWorker' in navigator) {
         practiceState.wordScores[index] = !missed ? 1 : 0;
         if (!missed) practiceState.correctPracticeIndices.add(index);
         // Only flag a miss if the word was typed incorrectly (stroke excess is already caught live).
-        if (missed && !practiceState.mistakePracticeIndices.has(index)) {
-            practiceState.mistakePracticeIndices.add(index);
-            playPracticeFeedback('miss');
-        }
+        if (missed) recordPracticeMistake(index);
         if (practiceState.wordScores[index]) playPracticeFeedback('correct');
         refreshPracticeAccuracy();
     }
@@ -2368,7 +2385,7 @@ if ('serviceWorker' in navigator) {
         statsInterval = setInterval(recordHistoryStat, 1000);
         
         document.getElementById('liveWpm').innerText = "0";
-        document.getElementById('liveAcc').innerText = "100.00%";
+        document.getElementById('liveAcc').innerText = "0.00%";
         document.getElementById('liveAvgStr').innerText = "0";
         
         document.getElementById('practiceSetup').style.display = 'none';
@@ -2779,7 +2796,7 @@ if ('serviceWorker' in navigator) {
 
         const strokeTargetLimit = practiceState.hintType === 'longest'
             ? (strokeLimits.max || strokeLimits.min || 1)
-            : (strokeLimits.max || strokeLimits.min || 1);
+            : (strokeLimits.min || strokeLimits.max || 1);
         if ((practiceState.strokeCounts[practiceState.currentIndex] || 0) > strokeTargetLimit) {
             if (!practiceState.mistakePracticeIndices.has(practiceState.currentIndex)) {
                 practiceState.mistakePracticeIndices.add(practiceState.currentIndex);
@@ -2906,6 +2923,7 @@ if ('serviceWorker' in navigator) {
                 practiceState.incorrectWordIndices.add(practiceState.currentIndex);
                 practiceState.eraseErrorWords.add(currentTarget);
                 registerProblemPracticeWord(currentTarget);
+                recordPracticeMistake(practiceState.currentIndex);
             }
             schedulePracticeVisualUpdate();
             if (practiceState.currentIndex >= words.length) endPractice();
@@ -3095,12 +3113,7 @@ if ('serviceWorker' in navigator) {
         const totalPracticeWords = practiceState.wordUnitCounts.length
             ? practiceState.wordUnitCounts.reduce((total, count) => total + count, 0)
             : practiceState.words.length;
-        
-        const misses = Array.from(practiceState.mistakePracticeIndices)
-            .reduce((total, index) => total + wordUnitCount(index), 0);
-        const acc = totalPracticeWords > 0
-            ? Math.max(0, 100 - (misses / totalPracticeWords) * 100)
-            : 100;
+        const acc = getPracticeAccuracy();
         
         const avgStr = practiceState.statsIndex > 0 ? (practiceState.statsTotalStrokes / practiceState.statsIndex).toFixed(2) : 0;
         const liveWpm = document.getElementById('liveWpm');
@@ -3160,6 +3173,7 @@ if ('serviceWorker' in navigator) {
             if (erasedWord) {
                 practiceState.eraseErrorWords.add(erasedWord);
                 registerProblemPracticeWord(erasedWord);
+                recordPracticeMistake(practiceState.currentIndex);
             }
         }
         document.getElementById('practiceArena').style.display = 'none';
