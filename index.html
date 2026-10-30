@@ -74,11 +74,9 @@
     </div>
 </div>
 
-<div id="menuToggle" onclick="toggleSidebar()">&#10094;</div>
-
-<div id="sidebar">
+<div id="sidebar" aria-hidden="true" inert>
     <div class="sidebar-header">
-        <h1>StenoDex</h1>
+        <a class="site-brand" href="#" onclick="switchTab('practice'); return false;">steno<span>dex</span></a>
     </div>
 
     <div class="section-title">Profile Selection</div>
@@ -92,7 +90,17 @@
 
     <div class="section-title">Themes</div>
     <div class="theme-grid" id="themeGroup">
-        <button onclick="setProfileTheme('dark')" id="theme-dark">Dark</button>
+        <button onclick="setProfileTheme('dark')" id="theme-dark">Monke</button>
+        <button onclick="setProfileTheme('blue')" id="theme-blue">Blue</button>
+        <button onclick="setProfileTheme('shrimp')" id="theme-shrimp">Shrimp</button>
+        <button onclick="setProfileTheme('coral-reef')" id="theme-coral-reef">Coral Reef</button>
+        <button onclick="setProfileTheme('tidepool')" id="theme-tidepool">Tidepool</button>
+        <button onclick="setProfileTheme('kelp-forest')" id="theme-kelp-forest">Kelp Forest</button>
+        <button onclick="setProfileTheme('deep-sea')" id="theme-deep-sea">Deep Sea</button>
+        <button onclick="setProfileTheme('sea-glass')" id="theme-sea-glass">Sea Glass</button>
+        <button onclick="setProfileTheme('lagoon')" id="theme-lagoon">Lagoon</button>
+        <button onclick="setProfileTheme('bioluminescent')" id="theme-bioluminescent">Bioluminescent</button>
+        <button onclick="setProfileTheme('sandbar')" id="theme-sandbar">Sandbar</button>
         <button onclick="setProfileTheme('neon-cyan')" id="theme-neon-cyan">Neon Cyan</button>
         <button onclick="setProfileTheme('light')" id="theme-light">Light</button>
         <button onclick="setProfileTheme('oled')" id="theme-oled">OLED</button>
@@ -135,11 +143,19 @@
         <label>Hover <input type="color" id="c_surfaceHover" onchange="updateCustomColor('surfaceHover', this.value)"></label>
         <label>Border <input type="color" id="c_border" onchange="updateCustomColor('border', this.value)"></label>
         <label>Text <input type="color" id="c_text" onchange="updateCustomColor('text', this.value)"></label>
+        <label>Muted Text <input type="color" id="c_textMuted" onchange="updateCustomColor('textMuted', this.value)"></label>
         <label>Accent <input type="color" id="c_accent" onchange="updateCustomColor('accent', this.value)"></label>
+        <label>Accent Text <input type="color" id="c_accentInvert" onchange="updateCustomColor('accentInvert', this.value)"></label>
         <label>Untyped Text <input type="color" id="c_practiceUntyped" onchange="updateCustomColor('practiceUntyped', this.value)"></label>
         <label>Correct Text <input type="color" id="c_practiceCorrect" onchange="updateCustomColor('practiceCorrect', this.value)"></label>
         <label>Wrong Text <input type="color" id="c_practiceWrong" onchange="updateCustomColor('practiceWrong', this.value)"></label>
+        <label>Problematic Words <input type="color" id="c_practiceProblematic" onchange="updateCustomColor('practiceProblematic', this.value)"></label>
+        <label>My Briefs <input type="color" id="c_practiceBrief" onchange="updateCustomColor('practiceBrief', this.value)"></label>
         <label>Cursor <input type="color" id="c_practiceCursor" onchange="updateCustomColor('practiceCursor', this.value)"></label>
+        <label>WPM Stat <input type="color" id="c_statWpm" onchange="updateCustomColor('statWpm', this.value)"></label>
+        <label>Accuracy Stat <input type="color" id="c_statAcc" onchange="updateCustomColor('statAcc', this.value)"></label>
+        <label>Strokes Stat <input type="color" id="c_statStr" onchange="updateCustomColor('statStr', this.value)"></label>
+        <label>Streak Stat <input type="color" id="c_statStreak" onchange="updateCustomColor('statStreak', this.value)"></label>
     </div>
 
     <div class="section-title">Display & Sound Options</div>
@@ -160,10 +176,10 @@
     <button onclick="resetLayout()" style="width:100%; margin-bottom: 15px;">Reset to Plover Default</button>
 
     <div class="section-title">Dictionaries (Profile <span id="lblProfileNum">1</span>)</div>
-    <div id="dropZone" class="drop-zone" onclick="document.getElementById('fileInput').click()">
+    <button id="dropZone" class="drop-zone" type="button" onclick="document.getElementById('fileInput').click()">
         + Add JSON Dictionaries<br><small>(New files take priority)</small>
-        <input type="file" id="fileInput" accept=".json" multiple style="display:none">
-    </div>
+    </button>
+    <input type="file" id="fileInput" accept=".json" multiple style="display:none">
     <div id="dictList" class="dict-list"></div>
     
     <div class="action-buttons-row">
@@ -184,19 +200,27 @@
     </div>
 </div>
 
+<header class="site-header">
+    <a class="site-brand" href="#" onclick="switchTab('practice'); return false;">steno<span>dex</span></a>
+    <div class="site-header-actions">
+        <div class="site-header-caption">PROFILE OPTIONS</div>
+        <button id="menuToggle" type="button" onclick="toggleSidebar()" aria-label="Open profile options" aria-controls="sidebar" aria-expanded="false">&#10094;</button>
+    </div>
+</header>
+
 <main>
-    <div class="view-tabs" id="viewTabs">
-        <button class="active" onclick="switchTab('search')">Dictionary Search</button>
-        <button onclick="switchTab('practice')">Practice Mode</button>
+    <div class="view-tabs" id="viewTabs" role="tablist" aria-label="Main views">
+        <button id="searchTab" type="button" role="tab" aria-controls="searchView" aria-selected="true" tabindex="0" class="active" onclick="switchTab('search')">Dictionary Search</button>
+        <button id="practiceTab" type="button" role="tab" aria-controls="practiceView" aria-selected="false" tabindex="-1" onclick="switchTab('practice')">Practice Mode</button>
     </div>
 
-    <div id="searchView">
+    <div id="searchView" role="tabpanel" aria-labelledby="searchTab">
         <div class="search-container">
             <div class="search-mode-wrapper">
-                <button id="searchModeBtn" class="search-mode-btn" onclick="toggleSearchMenu(event)">Word ▾</button>
-                <div id="searchModeMenu" class="search-mode-menu">
-                    <div class="search-mode-option" onclick="setSearchMode('word')">Word</div>
-                    <div class="search-mode-option" onclick="setSearchMode('stroke')">Stroke</div>
+                <button id="searchModeBtn" type="button" class="search-mode-btn" aria-controls="searchModeMenu" aria-expanded="false" onclick="toggleSearchMenu(event)">Word ▾</button>
+                <div id="searchModeMenu" class="search-mode-menu" aria-label="Search type">
+                    <button type="button" class="search-mode-option" onclick="setSearchMode('word', true)">Word</button>
+                    <button type="button" class="search-mode-option" onclick="setSearchMode('stroke', true)">Stroke</button>
                 </div>
             </div>
             <input type="text" id="searchInput" class="search-input" placeholder="Search a word..." autocomplete="off">
@@ -212,105 +236,427 @@
         </div>
     </div>
 
-    <div id="practiceView" style="display: none;">
+    <div id="practiceView" role="tabpanel" aria-labelledby="practiceTab" style="display: none;">
         <div id="practiceSetup" class="config-wrapper">
-            <select id="lessonSelect" class="profile-select lesson-select" aria-label="Practice lesson">
-                <option value="custom">Custom Material</option>
-                <option value="random-dictionary">Random from Dictionary</option>
-            </select>
-            <div class="practice-config-heading">
-                <h2>Practice Configuration</h2>
+            <section class="typing-dashboard">
+                <div class="dashboard-title">
+                    <div>
+                        <h1>Practice</h1>
+                        <p>Build speed, accuracy, and better steno habits.</p>
+                    </div>
+                    <div id="dashboardLastPractice" class="dashboard-last-practice">Ready when you are</div>
+                </div>
+                <div class="test-toolbar" aria-label="Practice test settings">
+                    <label class="test-setting">
+                        <span>Mode</span>
+                        <select id="practiceTestMode">
+                            <option value="quote">Quote</option>
+                            <option value="time">Time</option>
+                            <option value="words">Words</option>
+                            <option value="quotes">Quotes</option>
+                            <option value="daily">Daily goal</option>
+                            <option value="numbers">Numbers</option>
+                            <option value="symbols">Common symbols</option>
+                            <option value="jeff-phrasing">Jeff Phrasing</option>
+                            <option value="problematic">Problematic words</option>
+                            <option value="briefs">My briefs</option>
+                            <option value="lesson">Lesson / custom</option>
+                        </select>
+                    </label>
+                    <div class="practice-mode-controls" aria-label="Practice order and stroke settings">
+                        <label class="test-setting">
+                            <span>Word order</span>
+                            <select id="practiceMode" class="profile-select">
+                                <option value="random">Random</option>
+                                <option value="ordered">Ordered</option>
+                                <option value="random-pyramid">Random pyramid</option>
+                                <option value="ordered-pyramid">Ordered pyramid</option>
+                            </select>
+                        </label>
+                        <label class="test-setting">
+                            <span>Target strokes</span>
+                            <select id="strokeHintType" class="profile-select">
+                                <option value="shortest">Shortest form</option>
+                                <option value="longest">Longest form</option>
+                            </select>
+                        </label>
+                        <label class="test-setting">
+                            <span>Stroke hints</span>
+                            <select id="strokeVisibility" class="profile-select">
+                                <option value="always">Always show</option>
+                                <option value="error">Show on error</option>
+                                <option value="hidden">Hide</option>
+                            </select>
+                        </label>
+                    </div>
+                    <label class="test-setting test-language-setting">
+                        <span>Language</span>
+                        <select id="quoteLanguage" aria-label="Quote language">
+                            <option value="">Choose language</option>
+                        </select>
+                    </label>
+                    <label class="test-setting test-lesson-setting">
+                        <span>Lesson / material</span>
+                        <select id="lessonSelect" aria-label="Practice lesson or material">
+                            <option value="custom">Custom Material</option>
+                            <option value="random-dictionary">Random from Dictionary</option>
+                        </select>
+                    </label>
+                    <label class="test-setting quote-length-setting">
+                        <span>Quote length</span>
+                        <select id="practiceQuoteLength">
+                            <option value="short">Short</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="long">Long</option>
+                            <option value="marathon">Marathon</option>
+                        </select>
+                    </label>
+                    <label class="test-setting test-duration-setting">
+                        <span>Duration</span>
+                        <select id="practiceTestDuration">
+                            <option value="15">15 seconds</option>
+                            <option value="30">30 seconds</option>
+                            <option value="60" selected>1 minute</option>
+                            <option value="120">2 minutes</option>
+                            <option value="300">5 minutes</option>
+                            <option value="600">10 minutes</option>
+                        </select>
+                    </label>
+                    <label class="test-setting test-word-setting">
+                        <span>Word count</span>
+                        <select id="practiceTestWords">
+                            <option value="10">10 words</option>
+                            <option value="25">25 words</option>
+                            <option value="50" selected>50 words</option>
+                            <option value="100">100 words</option>
+                            <option value="250">250 words</option>
+                            <option value="500">500 words</option>
+                        </select>
+                    </label>
+                    <label class="test-setting test-quote-setting">
+                        <span>Quote count</span>
+                        <select id="practiceTestQuotes">
+                            <option value="3">3 quotes</option>
+                            <option value="5" selected>5 quotes</option>
+                            <option value="10">10 quotes</option>
+                            <option value="25">25 quotes</option>
+                            <option value="50">50 quotes</option>
+                        </select>
+                    </label>
+                    <label class="test-setting test-number-setting" hidden>
+                        <span>Number groups</span>
+                        <select id="practiceNumberGroups">
+                            <option value="10">10 groups</option>
+                            <option value="25">25 groups</option>
+                            <option value="50" selected>50 groups</option>
+                            <option value="100">100 groups</option>
+                            <option value="250">250 groups</option>
+                        </select>
+                    </label>
+                    <label class="test-setting test-number-setting" hidden>
+                        <span>Digits per group</span>
+                        <select id="practiceNumberDigits">
+                            <option value="1">1 digit</option>
+                            <option value="2">2 digits</option>
+                            <option value="3">3 digits</option>
+                            <option value="4">4 digits</option>
+                            <option value="5">5 digits</option>
+                            <option value="6" selected>6 digits</option>
+                            <option value="8">8 digits</option>
+                            <option value="10">10 digits</option>
+                            <option value="12">12 digits</option>
+                            <option value="18">18 digits</option>
+                            <option value="24">24 digits</option>
+                            <option value="36">36 digits</option>
+                        </select>
+                    </label>
+                    <label class="test-setting test-number-setting" hidden>
+                        <span>Number format</span>
+                        <select id="practiceNumberFormat">
+                            <option value="digits">Numerals</option>
+                            <option value="words">Words</option>
+                            <option value="mixed">Mixed</option>
+                        </select>
+                    </label>
+                    <label class="test-setting test-symbol-setting" hidden>
+                        <span>Symbol count</span>
+                        <select id="practiceSymbolCount">
+                            <option value="10">10 symbols</option>
+                            <option value="25">25 symbols</option>
+                            <option value="50" selected>50 symbols</option>
+                            <option value="100">100 symbols</option>
+                            <option value="250">250 symbols</option>
+                        </select>
+                    </label>
+                    <label class="test-setting jeff-phrasing-setting" hidden>
+                        <span>Phrases</span>
+                        <select id="jeffPhraseCount">
+                            <option value="10">10 phrases</option>
+                            <option value="25" selected>25 phrases</option>
+                            <option value="50">50 phrases</option>
+                            <option value="100">100 phrases</option>
+                        </select>
+                    </label>
+                    <label class="test-setting jeff-phrasing-setting" hidden>
+                        <span>Phrase form</span>
+                        <select id="jeffPhraseForm">
+                            <option value="simple">Simple</option>
+                            <option value="full">Full</option>
+                        </select>
+                    </label>
+                    <div class="test-setting jeff-phrasing-setting jeff-phrasing-components" hidden>
+                        <div class="jeff-simple-only jeff-option-section">
+                            <span>Simple starters</span>
+                            <div id="jeffStarterOptions" class="jeff-phrase-options" role="group" aria-label="Simple phrase starters"></div>
+                            <div class="jeff-option-actions"><button type="button" data-jeff-all="jeffStarterOptions">All</button><button type="button" data-jeff-none="jeffStarterOptions">None</button></div>
+                            <input id="jeffStarters" type="hidden" value="that, if, when, what, where, who, why, but, for">
+                        </div>
+                        <div class="jeff-simple-only jeff-option-section">
+                            <span class="jeff-simple-only">Pronouns</span>
+                            <div id="jeffPronounOptions" class="jeff-phrase-options" role="group" aria-label="Phrase pronouns"></div>
+                            <div class="jeff-option-actions"><button type="button" data-jeff-all="jeffPronounOptions">All</button><button type="button" data-jeff-none="jeffPronounOptions">None</button></div>
+                            <input id="jeffPronouns" type="hidden" value="I, we, he, she, you, they, it">
+                        </div>
+                        <div class="jeff-simple-only jeff-option-section">
+                            <span>Have</span>
+                            <div id="jeffSimpleHaveOptions" class="jeff-phrase-options" role="group" aria-label="Simple have structure"></div>
+                            <input id="jeffIncludeHave" type="checkbox" checked hidden>
+                        </div>
+                        <div class="jeff-simple-only jeff-option-section">
+                            <span>Verbs</span>
+                            <div id="jeffVerbOptions" class="jeff-phrase-options" role="group" aria-label="Simple phrase verbs"></div>
+                            <div class="jeff-option-actions"><button type="button" data-jeff-all="jeffVerbOptions">All</button><button type="button" data-jeff-none="jeffVerbOptions">None</button></div>
+                            <input id="jeffVerbs" type="hidden" value="ask, are, become, believe, call, can, care, change, come, consider, do, expect, feel, find, forget, get, give, go, have, happen, hear, hope, imagine, just, keep, know, learn, leave, let, like, live, look, love, make, may, mean, move, must, need, put, read, realize, really, recall, remember, remain, run, say, see, seem, set, shall, show, take, tell, think, try, understand, use, want, will, wish, work">
+                        </div>
+                        <div class="jeff-simple-only jeff-option-section">
+                            <span>Suffix options (T / S)</span>
+                            <div id="jeffSimpleSuffixOptions" class="jeff-phrase-options" role="group" aria-label="Simple phrase suffixes"></div>
+                            <div class="jeff-option-actions"><button type="button" data-jeff-all="jeffSimpleSuffixOptions">All</button><button type="button" data-jeff-none="jeffSimpleSuffixOptions">None</button></div>
+                            <input id="jeffSimpleSuffixes" type="hidden" value="T,S">
+                        </div>
+                        <div class="jeff-simple-only jeff-option-section">
+                            <span>Past options (D / Z)</span>
+                            <div id="jeffSimplePastOptions" class="jeff-phrase-options" role="group" aria-label="Simple past endings"></div>
+                            <div class="jeff-option-actions"><button type="button" data-jeff-all="jeffSimplePastOptions">All</button><button type="button" data-jeff-none="jeffSimplePastOptions">None</button></div>
+                            <input id="jeffSimplePast" type="hidden" value="D,Z">
+                        </div>
+                        <div class="jeff-full-only jeff-option-section">
+                            <span>Full-form starters</span>
+                            <div id="jeffFullStarterOptions" class="jeff-phrase-options" role="group" aria-label="Full-form starters"></div>
+                            <div class="jeff-option-actions"><button type="button" data-jeff-all="jeffFullStarterOptions">All</button><button type="button" data-jeff-none="jeffFullStarterOptions">None</button></div>
+                            <input id="jeffFullStarters" type="hidden" value="I, you, he, she, it, we, they, this, that, there, there-plural, is, are">
+                        </div>
+                        <div class="jeff-full-only jeff-option-section">
+                            <span>Auxiliaries</span>
+                            <div id="jeffAuxiliaryOptions" class="jeff-phrase-options" role="group" aria-label="Full-form auxiliaries"></div>
+                            <div class="jeff-option-actions"><button type="button" data-jeff-all="jeffAuxiliaryOptions">All</button><button type="button" data-jeff-none="jeffAuxiliaryOptions">None</button></div>
+                            <input id="jeffAuxiliaries" type="hidden" value="do, can, shall, will">
+                        </div>
+                        <div class="jeff-full-only jeff-option-section">
+                            <span>Structures</span>
+                            <div id="jeffStructureOptions" class="jeff-phrase-options" role="group" aria-label="Full-form structures"></div>
+                            <div class="jeff-option-actions"><button type="button" data-jeff-all="jeffStructureOptions">All</button><button type="button" data-jeff-none="jeffStructureOptions">None</button></div>
+                            <input id="jeffStructures" type="hidden" value="plain,negative,have,negative-have,be,negative-be,been,negative-been,still,negative-still,never,even,always,negative-always,just,negative-just">
+                        </div>
+                        <div class="jeff-full-only jeff-option-section">
+                            <span>Verbs</span>
+                            <div id="jeffFullVerbOptions" class="jeff-phrase-options" role="group" aria-label="Full-form verbs"></div>
+                            <div class="jeff-option-actions"><button type="button" data-jeff-all="jeffFullVerbOptions">All</button><button type="button" data-jeff-none="jeffFullVerbOptions">None</button></div>
+                            <input id="jeffFullVerbs" type="hidden" value="ask, are, become, believe, call, can, care, change, come, consider, do, expect, feel, find, forget, get, give, go, have, happen, hear, hope, imagine, just, keep, know, learn, leave, let, like, live, look, love, make, may, mean, move, must, need, put, read, realize, really, recall, remember, remain, run, say, see, seem, set, shall, show, take, tell, think, try, understand, use, want, will, wish, work">
+                        </div>
+                        <div class="jeff-full-only jeff-option-section">
+                            <span>Suffix options (T / S)</span>
+                            <div id="jeffFullSuffixOptions" class="jeff-phrase-options" role="group" aria-label="Full-form suffixes"></div>
+                            <div class="jeff-option-actions"><button type="button" data-jeff-all="jeffFullSuffixOptions">All</button><button type="button" data-jeff-none="jeffFullSuffixOptions">None</button></div>
+                            <input id="jeffFullSuffixes" type="hidden" value="T,S">
+                        </div>
+                        <div class="jeff-full-only jeff-option-section">
+                            <span>Past options (D / Z)</span>
+                            <div id="jeffFullPastOptions" class="jeff-phrase-options" role="group" aria-label="Full-form past endings"></div>
+                            <div class="jeff-option-actions"><button type="button" data-jeff-all="jeffFullPastOptions">All</button><button type="button" data-jeff-none="jeffFullPastOptions">None</button></div>
+                            <input id="jeffFullPast" type="hidden" value="D,Z">
+                        </div>
+                    </div>
+                </div>
+
                 <div id="practiceEstimate" class="practice-estimate">Estimated time: 0:00</div>
-            </div>
-            <textarea id="practiceMaterial" placeholder="Paste your practice text here... Or paste Typey Type format (Word [tab] STROKE) or Plover Clippy Tape logs to practice exact outlines!"></textarea>
-            <div class="saved-materials-row">
-                <input id="savedMaterialTitle" type="text" placeholder="Material title" aria-label="Saved material title">
-                <button id="saveMaterialButton" type="button" onclick="saveCustomMaterial()">Save Material</button>
-                <select id="savedMaterialSelect" class="profile-select" aria-label="Saved custom material">
-                    <option value="">Load saved material...</option>
-                </select>
-                <button id="deleteMaterialButton" type="button" onclick="deleteCustomMaterial()" title="Delete selected saved material" aria-label="Delete selected saved material">Delete</button>
-            </div>
-            <div id="quoteControls" class="quote-controls">
-                <select id="quoteLanguage" class="profile-select" aria-label="Quote language">
-                    <option value="">Choose quote language</option>
-                </select>
-                <button id="newQuoteButton" class="hidden" onclick="chooseNewQuote()">New Quote</button>
-                <button id="clearPracticeButton" onclick="clearPracticeMaterial()" title="Clear practice text">Clear</button>
-            </div>
-            
-            <div class="practice-settings-group practice-select-row">
-                <select id="practiceMode" class="profile-select">
-                    <option value="random">Words in Random Order</option>
-                    <option value="ordered">Words in Ordered Order</option>
-                    <option value="random-pyramid">Words in Random Pyramid</option>
-                    <option value="ordered-pyramid">Words in Ordered Pyramid</option>
-                    <!-- Endless Mode removed -->
-                </select>
+                <details class="advanced-practice">
+                    <summary>Custom material &amp; steno options</summary>
+                    <div class="practice-config-heading">
+                        <h2>Practice Configuration</h2>
+                    </div>
+                    <textarea id="practiceMaterial" placeholder="Paste your practice text here... Or paste Typey Type format (Word [tab] STROKE) or Plover Clippy Tape logs to practice exact outlines!"></textarea>
+                    <div class="saved-materials-row">
+                        <input id="savedMaterialTitle" type="text" placeholder="Material title" aria-label="Saved material title">
+                        <button id="saveMaterialButton" type="button" onclick="saveCustomMaterial()">Save Material</button>
+                        <select id="savedMaterialSelect" class="profile-select" aria-label="Saved custom material">
+                            <option value="">Load saved material...</option>
+                        </select>
+                        <button id="deleteMaterialButton" type="button" onclick="deleteCustomMaterial()" title="Delete selected saved material" aria-label="Delete selected saved material">Delete</button>
+                    </div>
+                    <div id="quoteControls" class="quote-controls">
+                        <button id="newQuoteButton" class="hidden" onclick="chooseNewQuote()">New Quote</button>
+                        <button id="clearPracticeButton" onclick="clearPracticeMaterial()" title="Clear practice text">Clear</button>
+                    </div>
 
-                <select id="strokeHintType" class="profile-select">
-                    <option value="shortest">Target: Shortest Form</option>
-                    <option value="longest">Target: Longest Form</option>
-                </select>
-                
-                <select id="strokeVisibility" class="profile-select">
-                    <option value="always">Always Show Strokes</option>
-                    <option value="error">Show Strokes on Error</option>
-                    <option value="hidden">Hide Strokes</option>
-                </select>
-            </div>
-            
-            <div class="practice-settings-group practice-options-row">
-                <div class="practice-number-control">
-                    <label style="font-size:0.9rem;color:var(--text-muted);">Start Word</label>
-                    <input id="practiceStartWord" type="number" min="1" value="1" style="width:72px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
-                </div>
-                <div class="practice-number-control">
-                    <label style="font-size:0.9rem;color:var(--text-muted);">End Word</label>
-                    <input id="practiceEndWord" type="number" min="0" value="0" placeholder="All" style="width:72px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
-                </div>
-                <div class="practice-number-control">
-                    <label style="font-size:0.9rem;color:var(--text-muted);">Repeats</label>
-                    <input id="practiceRepeats" type="number" min="0" value="0" style="width:72px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
-                </div>
-                <div class="practice-number-control">
-                    <label style="font-size:0.9rem;color:var(--text-muted);">Max Words</label>
-                    <input id="practiceMaxWords" type="number" min="0" value="0" style="width:84px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
-                </div>
-                <div class="practice-number-control">
-                    <label style="font-size:0.9rem;color:var(--text-muted);">Problem Words</label>
-                    <input id="practiceProblemWords" type="number" min="0" value="0" style="width:84px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
-                </div>
-                <div class="practice-number-control">
-                    <label style="font-size:0.9rem;color:var(--text-muted);">My Briefs</label>
-                    <input id="practiceBriefWords" type="number" min="0" value="0" style="width:84px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
-                </div>
-            </div>
+                    <div class="practice-settings-group practice-options-row">
+                        <div class="practice-number-control">
+                            <label style="font-size:0.9rem;color:var(--text-muted);">Start Word</label>
+                            <input id="practiceStartWord" type="number" min="1" value="1" style="width:72px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
+                        </div>
+                        <div class="practice-number-control">
+                            <label style="font-size:0.9rem;color:var(--text-muted);">End Word</label>
+                            <input id="practiceEndWord" type="number" min="0" value="0" placeholder="All" style="width:72px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
+                        </div>
+                        <div class="practice-number-control">
+                            <label style="font-size:0.9rem;color:var(--text-muted);">Repeats</label>
+                            <input id="practiceRepeats" type="number" min="0" value="0" style="width:72px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
+                        </div>
+                        <div class="practice-number-control">
+                            <label style="font-size:0.9rem;color:var(--text-muted);">Max Words</label>
+                            <input id="practiceMaxWords" type="number" min="0" value="0" style="width:84px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
+                        </div>
+                        <div class="practice-number-control">
+                            <label style="font-size:0.9rem;color:var(--text-muted);">Problem Words</label>
+                            <input id="practiceProblemWords" type="number" min="0" value="0" style="width:84px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
+                        </div>
+                        <div class="practice-number-control">
+                            <label style="font-size:0.9rem;color:var(--text-muted);">My Briefs</label>
+                            <input id="practiceBriefWords" type="number" min="0" value="0" style="width:84px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);">
+                        </div>
+                    </div>
 
-            <div class="practice-toggles-row">
-                <div id="btnBlindMode" class="practice-toggle" onclick="togglePracticeOption('blindMode')">Blind Mode</div>
-                <div id="btnIgnoreCaps" class="practice-toggle" onclick="togglePracticeOption('ignoreCaps')">Ignore Capitalization</div>
-                <div id="btnIgnorePunct" class="practice-toggle" onclick="togglePracticeOption('ignorePunct')">Ignore Punctuation</div>
-            </div>
+                    <div class="practice-toggles-row">
+                        <button id="btnBlindMode" type="button" class="practice-toggle" aria-pressed="false" onclick="togglePracticeOption('blindMode')">Blind Mode</button>
+                        <button id="btnIgnoreCaps" type="button" class="practice-toggle" aria-pressed="false" onclick="togglePracticeOption('ignoreCaps')">Ignore Capitalization</button>
+                        <button id="btnIgnorePunct" type="button" class="practice-toggle" aria-pressed="false" onclick="togglePracticeOption('ignorePunct')">Ignore Punctuation</button>
+                    </div>
+                    <div class="practice-button-stack">
+                        <button onclick="startPractice()" style="width: 100%; font-weight: bold;">Start Practice</button>
+                        <div id="practiceCapWarning" class="practice-cap-warning" hidden>Exercise capped at 50,000 words. It cannot go above this limit.</div>
+                    </div>
 
-            <div class="practice-button-stack">
-                <button onclick="startPractice()" style="width: 100%; font-weight: bold;">Start Practice</button>
-                <div id="practiceCapWarning" class="practice-cap-warning" hidden>Exercise capped at 50,000 words. It cannot go above this limit.</div>
-            </div>
+                    <details class="practice-list-details">
+                        <summary>Problematic Words <span id="problematicWordCount">0</span></summary>
+                        <button class="clear-practice-list-button" type="button" onclick="clearPracticeList('problematic')">Clear Problematic Words</button>
+                        <div id="persistentProblematicWords" class="dict-list"><div class="quote-history-empty">None yet.</div></div>
+                    </details>
+                    <details class="practice-list-details">
+                        <summary>My Briefs <span id="briefWordCount">0</span></summary>
+                        <button class="clear-practice-list-button" type="button" onclick="clearPracticeList('briefs')">Clear My Briefs</button>
+                        <div id="persistentBriefWords" class="dict-list"><div class="quote-history-empty">None yet.</div></div>
+                    </details>
+                </details>
 
-            <div class="section-title" style="margin-top: 30px;">Progress Over Time</div>
-            <div style="display:flex;gap:15px;margin-bottom:15px;flex-wrap:wrap;">
-                <div class="stat-box" style="flex:1;text-align:center;padding:12px;">WPM<br><span id="progressWpm" class="stat-wpm" style="font-size:1.8rem;">0</span></div>
-                <div class="stat-box" style="flex:1;text-align:center;padding:12px;">Accuracy<br><span id="progressAcc" class="stat-acc" style="font-size:1.8rem;">100.00%</span></div>
-                <div class="stat-box" style="flex:1;text-align:center;padding:12px;">Avg Strokes/Word<br><span id="progressStr" class="stat-str" style="font-size:1.8rem;">0.00</span></div>
-                <div class="stat-box" style="flex:1;text-align:center;padding:12px;">Longest Streak<br><span id="progressStreak" class="stat-streak" style="font-size:1.8rem;">0</span></div>
-            </div>
-            <div id="progressGraphWrap" style="position: relative;">
-                <canvas id="progressGraph" width="800" height="400" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;"></canvas>
-                <div id="progressGraphLabel" style="display:none;position:absolute;z-index:2;padding:6px 8px;background:var(--surface);color:var(--text-main);border:1px solid var(--accent);border-radius:4px;font:12px monospace;pointer-events:none;white-space:nowrap;"></div>
-            </div>
-            <div class="section-title practice-list-heading"><select id="practiceListSelect" class="profile-select" aria-label="Practice list"><option value="problematic">Problematic Words</option><option value="briefs">My Briefs</option></select><button id="clearPracticeListButton" type="button" onclick="clearPracticeList()">Clear List</button></div>
-            <div id="persistentProblemWords" class="dict-list"><div style="color:var(--text-muted);">None yet.</div></div>
+                <div class="daily-insights-layout">
+                    <div id="dailyGoalPanel" class="daily-goal-panel">
+                        <div class="daily-goal-copy">
+                            <span class="dashboard-eyebrow">DAILY PRACTICE GOAL</span>
+                            <span id="dailyGoalMessage">A little practice every day adds up.</span>
+                        </div>
+                        <div class="daily-goal-actions">
+                            <button id="startDailyGoalButton" type="button" onclick="startDailyQuotePractice()">Practice goal</button>
+                        </div>
+                        <div class="daily-mode-goals" aria-label="Daily practice goals">
+                            <div class="daily-mode-goal">
+                                <span>Quotes <strong id="dailyGoalQuoteSummary"><span id="dailyGoalComplete">0</span> / <span id="dailyGoalTotal">5</span></strong><strong id="dailyGoalQuoteSkipped" hidden>Skipped · complete</strong></span>
+                                <input id="dailyGoalInput" type="number" min="0" max="100" value="5" aria-label="Daily quote goal">
+                                <div id="dailyGoalQuoteTrack" class="daily-goal-track" role="progressbar" aria-label="Daily quote goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalBar" class="daily-goal-bar"></div></div>
+                            </div>
+                            <div class="daily-mode-goal">
+                                <span>Words <strong id="dailyGoalWordsSummary"><span id="dailyGoalWordsComplete">0</span> / <span id="dailyGoalWordsTotal">100</span></strong><strong id="dailyGoalWordsSkipped" hidden>Skipped · complete</strong></span>
+                                <input id="dailyGoalWordsInput" type="number" min="0" max="50000" step="10" value="100" aria-label="Daily word goal">
+                                <div id="dailyGoalWordsTrack" class="daily-goal-track" role="progressbar" aria-label="Daily word goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalWordsBar" class="daily-goal-bar"></div></div>
+                            </div>
+                            <div class="daily-mode-goal">
+                                <span>Problematic words <strong id="dailyGoalProblematicProgress">0 / 10</strong></span>
+                                <input id="dailyGoalProblematicInput" type="number" min="0" max="50000" value="10" aria-label="Daily problematic words goal">
+                                <div id="dailyGoalProblematicTrack" class="daily-goal-track" role="progressbar" aria-label="Daily problematic words goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalProblematicBar" class="daily-goal-bar"></div></div>
+                            </div>
+                            <div class="daily-mode-goal">
+                                <span>My briefs <strong id="dailyGoalBriefsProgress">0 / 10</strong></span>
+                                <input id="dailyGoalBriefsInput" type="number" min="0" max="50000" value="10" aria-label="Daily briefs goal">
+                                <div id="dailyGoalBriefsTrack" class="daily-goal-track" role="progressbar" aria-label="Daily briefs goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalBriefsBar" class="daily-goal-bar"></div></div>
+                            </div>
+                            <div class="daily-mode-goal">
+                                <span>Accuracy &gt;95% <strong id="dailyGoalAccuracyProgress">0 / 5</strong></span>
+                                <input id="dailyGoalAccuracyInput" type="number" min="0" max="50000" value="5" aria-label="Daily above 95 percent accuracy goal">
+                                <div id="dailyGoalAccuracyTrack" class="daily-goal-track" role="progressbar" aria-label="Daily above 95 percent accuracy goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalAccuracyBar" class="daily-goal-bar"></div></div>
+                            </div>
+                            <div class="daily-mode-goal">
+                                <span>Numbers <strong id="dailyGoalNumbersProgress">0 / 10</strong></span>
+                                <input id="dailyGoalNumbersInput" type="number" min="0" max="50000" value="10" aria-label="Daily numbers goal">
+                                <div id="dailyGoalNumbersTrack" class="daily-goal-track" role="progressbar" aria-label="Daily numbers goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalNumbersBar" class="daily-goal-bar"></div></div>
+                            </div>
+                            <div class="daily-mode-goal">
+                                <span>Symbols <strong id="dailyGoalSymbolsProgress">0 / 25</strong></span>
+                                <input id="dailyGoalSymbolsInput" type="number" min="0" max="50000" value="25" aria-label="Daily symbols goal">
+                                <div id="dailyGoalSymbolsTrack" class="daily-goal-track" role="progressbar" aria-label="Daily symbols goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalSymbolsBar" class="daily-goal-bar"></div></div>
+                            </div>
+                            <div class="daily-mode-goal">
+                                <span>Jeff phrases <strong id="dailyGoalJeffPhrasesProgress">0 / 10</strong></span>
+                                <input id="dailyGoalJeffPhrasesInput" type="number" min="0" max="50000" value="10" aria-label="Daily Jeff Phrasing goal">
+                                <div id="dailyGoalJeffPhrasesTrack" class="daily-goal-track" role="progressbar" aria-label="Daily Jeff Phrasing goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalJeffPhrasesBar" class="daily-goal-bar"></div></div>
+                            </div>
+                        </div>
+                        <div class="wpm-milestone-panel">
+                            <span class="dashboard-eyebrow">PERSONAL SPEED MILESTONES</span>
+                            <div id="wpmMilestones" class="wpm-milestones" role="meter" aria-label="Personal best speed milestones"></div>
+                        </div>
+                    </div>
+                    <section id="typistAveragesPanel" class="typist-averages-panel" aria-labelledby="typistAveragesTitle">
+                        <div class="dashboard-section-heading">
+                            <h2 id="typistAveragesTitle">Typist averages</h2>
+                            <span>Last 30 days</span>
+                        </div>
+                        <p class="typist-averages-caption">30-day performance averages · daily practice volume</p>
+                        <div id="typistAveragesChart" class="typist-averages-chart" role="img" aria-label="Eight-axis chart of average speed, accuracy, stroke efficiency, and daily practice volume over the last 30 days"></div>
+                        <div class="typist-averages-legend" aria-label="Chart legend">
+                            <span class="typist-legend-wpm">Speed</span>
+                            <span class="typist-legend-accuracy">Accuracy</span>
+                            <span class="typist-legend-strokes">Stroke efficiency</span>
+                            <span class="typist-legend-volume">Daily volume</span>
+                        </div>
+                        <details class="typist-averages-details">
+                            <summary>View exact averages</summary>
+                            <div id="typistAveragesTable" class="typist-averages-table-wrap"></div>
+                        </details>
+                    </section>
+                </div>
+
+                <div class="dashboard-stat-row">
+                    <div class="dashboard-stat"><span class="dashboard-eyebrow">DAYS PRACTICED</span><strong id="dashboardDays">0</strong></div>
+                    <div class="dashboard-stat"><span class="dashboard-eyebrow">QUOTES TYPED</span><strong id="dashboardQuotes">0</strong></div>
+                    <div class="dashboard-stat"><span class="dashboard-eyebrow">BEST WPM</span><strong id="dashboardBestWpm">0</strong></div>
+                    <div class="dashboard-stat"><span class="dashboard-eyebrow">BEST ACCURACY</span><strong id="dashboardBestAccuracy">0%</strong></div>
+                    <div class="dashboard-stat"><span class="dashboard-eyebrow">WORDS TYPED</span><strong id="dashboardWords">0</strong></div>
+                    <div class="dashboard-stat"><span class="dashboard-eyebrow">AVERAGE WPM</span><strong id="dashboardAverageWpm">0</strong></div>
+                    <div class="dashboard-stat"><span class="dashboard-eyebrow">AVERAGE ACCURACY</span><strong id="dashboardAverageAccuracy">0%</strong></div>
+                    <div class="dashboard-stat"><span class="dashboard-eyebrow">AVG. STROKES / WORD</span><strong id="dashboardAverageStrokes">0.00</strong></div>
+                    <div class="dashboard-stat"><span class="dashboard-eyebrow">LONGEST STREAK</span><strong id="dashboardLongestStreak">0</strong></div>
+                </div>
+
+                <div class="dashboard-section-heading"><h2>Mode records</h2><span>Personal bests</span></div>
+                <div id="modeRecords" class="mode-records"></div>
+                <details class="lesson-record-details">
+                    <summary>Individual lesson records <span id="lessonRecordCount">0</span></summary>
+                    <div id="lessonRecordList" class="mode-records lesson-records"></div>
+                </details>
+                <details class="quote-history-details">
+                    <summary>Recently typed quotes <span id="quoteHistoryCount">0</span></summary>
+                    <div id="quoteHistoryList" class="quote-history-list"></div>
+                </details>
+                <details class="activity-details">
+                    <summary>Progress over time</summary>
+                    <div id="progressGraphWrap" class="practice-graph-wrap">
+                        <canvas id="progressGraph" class="practice-graph" width="800" height="400" aria-label="Practice progress graph"></canvas>
+                        <div id="progressGraphLabel" style="display:none;position:absolute;z-index:2;padding:6px 8px;background:var(--surface);color:var(--text-main);border:1px solid var(--accent);border-radius:4px;font:12px monospace;pointer-events:none;white-space:nowrap;"></div>
+                    </div>
+                </details>
+            </section>
+
+            <button id="startPracticeButton" class="start-test-button" type="button" onclick="startPractice()">Start test</button>
+
         </div>
 
         <div id="practiceArena" style="display: none; position: relative; flex-direction: column;">
@@ -323,14 +669,17 @@
                     <div class="stat-box" title="Current / Longest Correct Streak">Streak: <span id="liveStreak" class="stat-streak">0</span> / <span id="liveLongestStreak" class="stat-streak">0</span></div>
                     <div class="stat-box practice-progress-box"><span id="liveProgressText">0 / 0</span><div class="practice-progress-track"><div id="liveProgressBar" class="practice-progress-bar"></div></div></div>
                 </div>
-                <button onclick="endPractice()" style="border-color: #ff5555; color: #ff5555; width: auto; padding: 8px 16px; z-index: 20; position: relative;">End Session</button>
+                <button onclick="endPractice()" class="end-test-button">End test</button>
             </div>
 
+            <div id="liveTestStatus" class="live-test-status"></div>
             <div class="monkey-container" id="monkeyContainer">
-                <textarea id="practiceInput" autocomplete="off" autocorrect="off" spellcheck="false" oninput="handleTyping(event)"></textarea>
+                <textarea id="practiceInput" aria-label="Type the displayed practice text" autocomplete="off" autocorrect="off" spellcheck="false" oninput="handleTyping(event)"></textarea>
                 <div id="monkeyText" class="monkey-text"></div>
             </div>
             <div id="strokeHint" class="stroke-hint"></div>
+            <button id="redoPracticeButton" class="redo-practice-button" type="button" onclick="restartPractice()" aria-label="Restart test" title="Restart test">↻</button>
+            <div class="practice-keyboard-hint"><kbd>Enter</kbd> after a quote to continue · <kbd>Tab</kbd> then <kbd>Enter</kbd> to restart · <kbd>Esc</kbd> to end</div>
 
         </div>
 
@@ -346,12 +695,16 @@
 
             <div style="position: relative;">
                 <div id="resultGraphWrap" style="position: relative;">
-                    <canvas id="resultGraph" width="800" height="400" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 25px;"></canvas>
+                    <canvas id="resultGraph" class="practice-graph" width="800" height="400" aria-label="Practice session graph"></canvas>
                     <div id="graphPointLabel" style="display:none;position:absolute;z-index:2;padding:5px 8px;background:var(--surface);color:var(--text-main);border:1px solid var(--accent);border-radius:4px;font:12px monospace;pointer-events:none;white-space:nowrap;"></div>
                 </div>
             </div>
 
-            <button onclick="resetPracticeUI()" style="margin: 0 0 20px 0; width: 100%;">Back to Setup</button>
+            <div class="result-actions">
+                <button onclick="restartPractice()" class="start-test-button">Try again</button>
+                <button onclick="resetPracticeUI()">Back to practice</button>
+            </div>
+            <div class="practice-keyboard-hint result-keyboard-hint"><kbd>Enter</kbd> to practice another quote · <kbd>Esc</kbd> to return to practice setup</div>
 
             <div class="section-title">Problematic Words (Missed / Typos)</div>
             <div id="missedWordsList" class="dict-list"></div>
