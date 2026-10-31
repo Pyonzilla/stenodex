@@ -747,7 +747,8 @@
             flex-wrap: wrap;
             justify-content: center;
         }
-        .monkey-word.punct { margin-left: -0.25em; }
+        .monkey-word.punct-close { margin-left: -0.25em; }
+        .monkey-word.punct-open { margin-right: -0.25em; }
         .monkey-word.punct .letter { font-size: 0.95em; }
         .hidden-punct { display: none; }
         .practice-hidden { display: none; }
@@ -1018,12 +1019,16 @@
         .test-quote-setting,
         .test-number-setting,
         .test-symbol-setting,
+        .test-problematic-setting,
+        .test-briefs-setting,
         .jeff-phrasing-setting { display: none; }
         .typing-dashboard[data-mode="time"] .test-duration-setting,
         .typing-dashboard[data-mode="words"] .test-word-setting,
         .typing-dashboard[data-mode="quotes"] .test-quote-setting,
         .typing-dashboard[data-mode="numbers"] .test-number-setting,
-        .typing-dashboard[data-mode="symbols"] .test-symbol-setting { display: flex; }
+        .typing-dashboard[data-mode="symbols"] .test-symbol-setting,
+        .typing-dashboard[data-mode="problematic"] .test-problematic-setting,
+        .typing-dashboard[data-mode="briefs"] .test-briefs-setting { display: flex; }
         .typing-dashboard[data-mode="jeff-phrasing"] .jeff-phrasing-setting { display: flex; }
         .typing-dashboard[data-mode="jeff-phrasing"] .jeff-phrasing-setting {
             align-items: flex-start;

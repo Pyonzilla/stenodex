@@ -145,6 +145,8 @@ if ('serviceWorker' in navigator) {
         practiceNumberDigits: '6',
         practiceNumberFormat: 'digits',
         practiceSymbolCount: '50',
+        practiceProblematicCount: 'all',
+        practiceBriefCount: 'all',
         jeffPhraseCount: '25',
         jeffPhraseForm: 'simple',
         jeffStarters: 'that, if, when, what, where, who, why, but, for',
@@ -467,6 +469,8 @@ if ('serviceWorker' in navigator) {
             practiceTestDuration: 'practiceTestDuration',
             practiceTestWords: 'practiceTestWords',
             practiceTestQuotes: 'practiceTestQuotes',
+            practiceProblematicCount: 'practiceProblematicCount',
+            practiceBriefCount: 'practiceBriefCount',
             practiceNumberGroups: 'practiceNumberGroups',
             practiceNumberDigits: 'practiceNumberDigits',
             practiceNumberFormat: 'practiceNumberFormat',
@@ -923,6 +927,74 @@ if ('serviceWorker' in navigator) {
 
     function isPracticePunctuation(value) {
         return /^\p{P}+$/u.test(String(value));
+    }
+
+    function isPracticeOpeningPunctuation(value) {
+        return /^[([{“‘«]$/u.test(String(value));
+    }
+
+    function isPracticeClosingPunctuation(value) {
+        return /^[.,!?;:%)\]}…’”»]$/u.test(String(value));
+    }
+
+    function hasCorrectPracticeSpacing(previousTarget, target, gap, previousIsOpeningQuote, targetIsClosingQuote) {
+        const effectiveGap = practiceState.ignorePunct ? gap.replace(/\p{P}/gu, '') : gap;
+        if (targetIsClosingQuote || isPracticeClosingPunctuation(target)
+            || previousIsOpeningQuote || isPracticeOpeningPunctuation(previousTarget)) {
+            return effectiveGap.length === 0;
+        }
+        return effectiveGap === ' ';
+    }
+
+    function findPracticeSpacingMismatch(input, words, startIndex = 0) {
+        if (practiceState.testMode === 'symbols') return -1;
+        if (/^\s/u.test(input)) return startIndex;
+        const typedTokens = [];
+        for (const match of input.matchAll(/[\p{L}\p{M}\p{N}_'’-]+|[\p{P}\p{S}]/gu)) {
+            if (practiceState.ignorePunct && practiceState.testMode !== 'symbols' && isPracticePunctuation(match[0])) continue;
+            typedTokens.push({ value: match[0], start: match.index, end: match.index + match[0].length });
+        }
+
+        const targets = [];
+        let straightQuoteOpen = false;
+        for (let index = startIndex; index < words.length && targets.length <= typedTokens.length; index++) {
+            const value = words[index];
+            if (practiceState.ignorePunct && practiceState.testMode !== 'symbols' && isPracticePunctuation(value)) continue;
+            for (const part of String(value).split(/\s+/).filter(Boolean)) {
+                const isStraightQuote = part === '"';
+                targets.push({
+                    value: part,
+                    index,
+                    isOpeningQuote: isStraightQuote && !straightQuoteOpen,
+                    isClosingQuote: isStraightQuote && straightQuoteOpen
+                });
+                if (isStraightQuote) straightQuoteOpen = !straightQuoteOpen;
+                if (targets.length > typedTokens.length) break;
+            }
+        }
+
+        let typedIndex = 0;
+        let previousToken = null;
+        let previousTarget = null;
+        for (const target of targets) {
+            const token = typedTokens[typedIndex];
+            if (!token) return -1;
+            if (previousToken) {
+                const gap = input.slice(previousToken.end, token.start);
+                if (!hasCorrectPracticeSpacing(
+                    previousTarget.value,
+                    target.value,
+                    gap,
+                    previousTarget.isOpeningQuote,
+                    target.isClosingQuote
+                )) return target.index;
+            }
+            if (normalizeForComparison(token.value) !== normalizeForComparison(target.value)) return -1;
+            previousToken = token;
+            previousTarget = target;
+            typedIndex++;
+        }
+        return -1;
     }
 
     // Skip over punctuation tokens when Ignore Punctuation is enabled
@@ -1517,6 +1589,7 @@ if ('serviceWorker' in navigator) {
         strokeCounts: [],
         maxStrokesMap: {}, 
         currentIndex: 0,
+        inputStartIndex: 0,
         lastScrolledIndex: -1,
         lastScrolledLineTop: -1,
         lockedScrollTop: 0,
@@ -1533,6 +1606,7 @@ if ('serviceWorker' in navigator) {
         correctPracticeIndices: new Set(),
         mistakePracticeIndices: new Set(),
         statsIndex: 0,
+        endlessPracticeListSnapshot: null,
         statsCorrectChars: 0,
         statsCorrectWords: 0,
         statsTotalStrokes: 0,
@@ -1548,8 +1622,15 @@ if ('serviceWorker' in navigator) {
         blindTimer: 0,
         missed: new Set(),
         inefficient: new Set(),
-        // endless mode removed; keep simple session flags
         isEndless: false,
+        endlessRefillInProgress: false,
+        endlessRefillFailed: false,
+        endlessCompletedItems: 0,
+        endlessCompletedWordUnits: 0,
+        endlessCorrectCharacters: 0,
+        endlessTotalStrokes: 0,
+        endlessAttemptedWordUnits: 0,
+        endlessCorrectWordUnits: 0,
         customDict: null,
         
         sessionStartTime: 0,
@@ -1707,7 +1788,7 @@ if ('serviceWorker' in navigator) {
             && !practiceState.sessionEnding
             && document.getElementById('practiceArena')?.style.display !== 'none';
         const activeCount = isJeffPhrasing
-            ? Math.min(practiceState.currentIndex, practiceState.words.length)
+            ? practiceState.endlessCompletedItems + Math.min(practiceState.currentIndex, practiceState.words.length)
             : practiceState.statsIndex;
         return savedCount + (active ? activeCount : 0);
     }
@@ -2219,12 +2300,14 @@ if ('serviceWorker' in navigator) {
             ...practiceState.incorrectWordIndices,
             ...practiceState.mistakePracticeIndices
         ]);
-        const attemptedWords = Array.from(attemptedIndices).reduce((total, index) => {
+        const attemptedWords = practiceState.endlessAttemptedWordUnits
+            + Array.from(attemptedIndices).reduce((total, index) => {
             return total + (practiceState.wordUnitCounts[index] ?? 1);
         }, 0);
         if (attemptedWords === 0) return 0;
 
-        const correctWords = Array.from(practiceState.correctPracticeIndices)
+        const correctWords = practiceState.endlessCorrectWordUnits
+            + Array.from(practiceState.correctPracticeIndices)
             .filter(index =>
                 !practiceState.incorrectWordIndices.has(index) &&
                 !practiceState.mistakePracticeIndices.has(index))
@@ -2278,7 +2361,7 @@ if ('serviceWorker' in navigator) {
         const targetStrokes = getSelectedPracticeStrokeLimit(word);
         const missed = wasAlreadyMissed || (practiceState.strokeCounts[index] || 0) > targetStrokes;
         if (missed) {
-            practiceState.eraseErrorWords.add(word);
+            trackPracticeErrorWord(word);
             if (!wasAlreadyMissed) registerProblemPracticeWord(word);
             practiceState.currentStreak = 0;
         } else {
@@ -2518,7 +2601,7 @@ if ('serviceWorker' in navigator) {
             document.getElementById('newQuoteButton').classList.toggle('hidden', !quoteLanguage.value);
         });
 
-        ['practiceTestMode', 'practiceQuoteLength', 'practiceTestDuration', 'practiceTestWords', 'practiceTestQuotes', 'practiceNumberGroups', 'practiceNumberDigits', 'practiceNumberFormat', 'practiceSymbolCount', 'jeffPhraseCount', 'jeffPhraseForm'].forEach(id => {
+        ['practiceTestMode', 'practiceQuoteLength', 'practiceTestDuration', 'practiceTestWords', 'practiceTestQuotes', 'practiceProblematicCount', 'practiceBriefCount', 'practiceNumberGroups', 'practiceNumberDigits', 'practiceNumberFormat', 'practiceSymbolCount', 'jeffPhraseCount', 'jeffPhraseForm'].forEach(id => {
             const input = document.getElementById(id);
             if (!input) return;
             input.addEventListener('change', () => {
@@ -2632,8 +2715,8 @@ if ('serviceWorker' in navigator) {
 
     window.addEventListener('load', loadLessons);
 
-    async function getPracticeListMaterial(listName, limit = 0) {
-        const entries = getPersistentProgress()[listName] || {};
+    async function getPracticeListMaterial(listName, limit = 0, entriesOverride = null) {
+        const entries = entriesOverride || getPersistentProgress()[listName] || {};
         const lines = [];
         const words = Object.keys(entries);
         const selectedWords = limit > 0
@@ -2719,9 +2802,13 @@ if ('serviceWorker' in navigator) {
     async function updatePracticeEstimate() {
         const estimate = document.getElementById('practiceEstimate');
         if (!estimate) return;
+        const testMode = document.getElementById('practiceTestMode')?.value || 'lesson';
+        if (ENDLESS_PRACTICE_MODES.has(testMode) && getPracticeCountSelection(testMode).endless) {
+            estimate.textContent = 'Endless session; practice items load in small batches.';
+            return;
+        }
         const updateId = ++practiceEstimateUpdateId;
         const material = document.getElementById('practiceMaterial')?.value || '';
-        const testMode = document.getElementById('practiceTestMode')?.value || 'lesson';
         const order = document.getElementById('practiceMode')?.value || 'random';
         let selectedWords = 0;
         let estimatedSeconds = null;
@@ -2785,12 +2872,14 @@ if ('serviceWorker' in navigator) {
             selectedWords = orderGeneratedPracticeWords(buildGeneratedPracticeQueue('symbols'), order).length;
         } else if (testMode === 'problematic' || testMode === 'briefs') {
             const listName = testMode === 'problematic' ? 'problematic' : 'briefs';
+            const count = getPracticeCountSelection(testMode).count;
+            const available = Object.keys(getPersistentProgress()[listName] || {}).length;
             selectedWords = estimateModeWordCount(
-                Math.min(MAX_PRACTICE_WORDS, Object.keys(getPersistentProgress()[listName] || {}).length),
+                Math.min(MAX_PRACTICE_WORDS, count ? Math.min(count, available) : available),
                 order
             );
         } else if (testMode === 'jeff-phrasing') {
-            const phraseCount = Number(document.getElementById('jeffPhraseCount')?.value) || 25;
+            const phraseCount = getPracticeCountSelection(testMode).count || 25;
             const wordsPerPhrase = document.getElementById('jeffPhraseForm')?.value === 'full' ? 4 : 3;
             selectedWords = phraseCount * wordsPerPhrase;
         }
@@ -2808,16 +2897,225 @@ if ('serviceWorker' in navigator) {
     }
 
     const MAX_PRACTICE_WORDS = 50000;
+    const ENDLESS_CHUNK_SIZE = 100;
+    const ENDLESS_INITIAL_QUOTES = 5;
+    const ENDLESS_REFILL_THRESHOLD = 60;
+    const ENDLESS_PRUNE_THRESHOLD = 150;
+    const ENDLESS_MAX_RECORDED_ERRORS = 500;
+    const ENDLESS_PRACTICE_MODES = new Set([
+        'words', 'quotes', 'numbers', 'symbols', 'jeff-phrasing', 'problematic', 'briefs'
+    ]);
+    const ENDLESS_LIST_PRACTICE_MODES = new Set(['problematic', 'briefs']);
+
+    function getPracticeCountSelection(mode) {
+        const controlIds = {
+            words: 'practiceTestWords',
+            quotes: 'practiceTestQuotes',
+            numbers: 'practiceNumberGroups',
+            symbols: 'practiceSymbolCount',
+            'jeff-phrasing': 'jeffPhraseCount',
+            problematic: 'practiceProblematicCount',
+            briefs: 'practiceBriefCount'
+        };
+        const value = document.getElementById(controlIds[mode])?.value || '';
+        return {
+            endless: value === 'endless',
+            count: value === 'all' ? 0 : Math.max(0, Number(value) || 0)
+        };
+    }
+
+    function trackPracticeErrorWord(word) {
+        practiceState.eraseErrorWords.add(word);
+        if (practiceState.isEndless && practiceState.eraseErrorWords.size > ENDLESS_MAX_RECORDED_ERRORS) {
+            practiceState.eraseErrorWords.delete(practiceState.eraseErrorWords.values().next().value);
+        }
+    }
 
     function capPracticeQueue(words) {
         if (!Array.isArray(words)) return [];
         return words.slice(0, MAX_PRACTICE_WORDS);
     }
 
+    function cyclePracticeQueue(words, count, randomizeCycles) {
+        if (!words.length) return [];
+        const cycled = [];
+        while (cycled.length < count) {
+            const cycle = randomizeCycles ? shuffleArray(words) : words;
+            cycled.push(...cycle.slice(0, count - cycled.length));
+        }
+        return cycled;
+    }
+
     function orderGeneratedPracticeWords(words, mode) {
         if (mode === 'ordered') return capPracticeQueue(words);
         if (mode === 'random') return shuffleArray(words).slice(0, MAX_PRACTICE_WORDS);
         return generatePracticeQueue(words.join(' '), mode);
+    }
+
+    async function appendEndlessPracticeChunk() {
+        const mode = practiceState.testMode;
+        const previousCustomDict = practiceState.customDict;
+        let chunk = [];
+        let chunkDict = null;
+        if (mode === 'numbers' || mode === 'symbols') {
+            chunk = buildGeneratedPracticeQueue(mode, ENDLESS_CHUNK_SIZE);
+            if (practiceState.mode === 'random') chunk = shuffleArray(chunk);
+            else if (practiceState.mode === 'random-pyramid' || practiceState.mode === 'ordered-pyramid') {
+                chunk = generatePracticeQueue(chunk.join(' '), practiceState.mode).slice(0, ENDLESS_CHUNK_SIZE);
+            }
+        } else if (mode === 'words') {
+            const source = document.getElementById('quoteLanguage')?.value || '';
+            if (!source) throw new Error('Choose a language before continuing word practice.');
+            const quotes = await loadPracticeQuotes(source);
+            chunk = buildRandomWordTestQueue(quotes, source, ENDLESS_CHUNK_SIZE).words;
+        } else if (mode === 'jeff-phrasing') {
+            const material = await buildJeffPhrasingMaterial(ENDLESS_CHUNK_SIZE);
+            chunk = generatePracticeQueue(material, 'ordered');
+            chunkDict = practiceState.customDict;
+        } else if (mode === 'problematic' || mode === 'briefs') {
+            const material = await getPracticeListMaterial(
+                mode,
+                ENDLESS_CHUNK_SIZE,
+                practiceState.endlessPracticeListSnapshot
+            );
+            chunk = generatePracticeQueue(material, practiceState.mode);
+            chunkDict = practiceState.customDict;
+        } else {
+            throw new Error(`Endless practice does not support ${mode}.`);
+        }
+
+        if (ENDLESS_LIST_PRACTICE_MODES.has(mode)) {
+            chunk = cyclePracticeQueue(
+                chunk,
+                ENDLESS_CHUNK_SIZE,
+                practiceState.mode === 'random' || practiceState.mode === 'random-pyramid'
+            );
+        }
+        chunk = capPracticeQueue(chunk).slice(0, ENDLESS_CHUNK_SIZE);
+        if (!chunk.length) throw new Error('No new practice items are available for this mode.');
+        if (practiceState.sessionEnding) return;
+
+        const limits = await Promise.all(Array.from(new Set(chunk), async word => [
+            word,
+            await getStrokeLimitsAndOutlines(word)
+        ]));
+        if (practiceState.sessionEnding) return;
+
+        practiceState.words.push(...chunk);
+        practiceState.normalizedWords.push(...chunk.map(normalizeForComparison));
+        practiceState.typedWords.push(...chunk.map(() => ''));
+        practiceState.strokeCounts.push(...chunk.map(() => 0));
+        practiceState.wordScores.push(...chunk.map(() => 0));
+        practiceState.wordUnitCounts.push(...chunk.map(word => {
+            if (mode === 'symbols') return 1;
+            if (isPracticePunctuation(word)) return 0;
+            const units = String(word).match(/[\p{L}\p{M}\p{N}_'’-]+/gu);
+            return units && units.length ? units.length : 1;
+        }));
+        for (const [word, result] of limits) practiceState.maxStrokesMap[word] = result;
+        if (chunkDict) {
+            practiceState.customDict = { ...(previousCustomDict || {}), ...chunkDict };
+        }
+        schedulePracticeVisualUpdate();
+    }
+
+    async function ensureEndlessPracticeItems() {
+        if (!practiceState.isEndless
+            || !ENDLESS_PRACTICE_MODES.has(practiceState.testMode)
+            || practiceState.testMode === 'quotes'
+            || practiceState.endlessRefillInProgress
+            || practiceState.endlessRefillFailed
+            || practiceState.sessionEnding
+            || practiceState.words.length - practiceState.currentIndex > ENDLESS_REFILL_THRESHOLD) return;
+
+        practiceState.endlessRefillInProgress = true;
+        try {
+            await appendEndlessPracticeChunk();
+        } catch (error) {
+            practiceState.endlessRefillFailed = true;
+            openModal('Unable to load more practice', error.message, () => {});
+        } finally {
+            practiceState.endlessRefillInProgress = false;
+            if (practiceState.isEndless
+                && !practiceState.endlessRefillFailed
+                && !practiceState.sessionEnding
+                && practiceState.words.length - practiceState.currentIndex <= ENDLESS_REFILL_THRESHOLD) {
+                void ensureEndlessPracticeItems();
+            }
+        }
+    }
+
+    function pruneEndlessPracticeQueue(itemCount) {
+        const count = Math.min(Math.max(0, itemCount), practiceState.currentIndex);
+        if (!practiceState.isEndless || !count) return;
+
+        const attemptedIndices = new Set([
+            ...practiceState.correctPracticeIndices,
+            ...practiceState.incorrectWordIndices,
+            ...practiceState.mistakePracticeIndices
+        ]);
+        for (let index = 0; index < count; index++) {
+            const units = practiceState.wordUnitCounts[index] ?? 1;
+            practiceState.endlessCompletedItems++;
+            practiceState.endlessCompletedWordUnits += units;
+            if (attemptedIndices.has(index)) practiceState.endlessAttemptedWordUnits += units;
+            if (practiceState.correctPracticeIndices.has(index)
+                && !practiceState.incorrectWordIndices.has(index)
+                && !practiceState.mistakePracticeIndices.has(index)) {
+                practiceState.endlessCorrectWordUnits += units;
+                practiceState.endlessCorrectCharacters += practiceState.words[index].length + 1;
+            }
+            if (units > 0) practiceState.endlessTotalStrokes += practiceState.strokeCounts[index] || 0;
+        }
+
+        const activePartial = practiceState.typedWords[count] || '';
+        const shiftSet = indices => new Set(Array.from(indices)
+            .filter(index => index >= count)
+            .map(index => index - count));
+        practiceState.words.splice(0, count);
+        practiceState.normalizedWords.splice(0, count);
+        practiceState.typedWords.splice(0, count);
+        practiceState.strokeCounts.splice(0, count);
+        practiceState.wordScores.splice(0, count);
+        practiceState.wordUnitCounts.splice(0, count);
+        practiceState.completedIndices = shiftSet(practiceState.completedIndices);
+        practiceState.correctPracticeIndices = shiftSet(practiceState.correctPracticeIndices);
+        practiceState.incorrectWordIndices = shiftSet(practiceState.incorrectWordIndices);
+        practiceState.mistakePracticeIndices = shiftSet(practiceState.mistakePracticeIndices);
+        practiceState.reportedPracticeIndices = shiftSet(practiceState.reportedPracticeIndices);
+        practiceState.quoteRanges = practiceState.quoteRanges
+            .filter(range => range.end > count)
+            .map(range => ({ ...range, start: Math.max(0, range.start - count), end: range.end - count }));
+        practiceState.currentIndex -= count;
+        practiceState.inputStartIndex = Math.max(0, practiceState.inputStartIndex - count);
+        practiceState.typedEndIndex = activePartial ? practiceState.currentIndex : practiceState.currentIndex - 1;
+        practiceState.lastCompletedIndex = practiceState.currentIndex - 1;
+        practiceState.mismatchIndex = -1;
+        practiceState.extraTypedWords = [];
+        practiceState.logicalInput = activePartial;
+        practiceState.lastInputValue = activePartial;
+        const input = document.getElementById('practiceInput');
+        if (input) input.value = activePartial;
+
+        const retainedWords = new Set(practiceState.words);
+        practiceState.maxStrokesMap = Object.fromEntries(
+            Object.entries(practiceState.maxStrokesMap).filter(([word]) => retainedWords.has(word))
+        );
+        if (practiceState.customDict) {
+            practiceState.customDict = Object.fromEntries(
+                Object.entries(practiceState.customDict).filter(([word]) => retainedWords.has(word))
+            );
+        }
+        practiceState.missed = new Set(Array.from(practiceState.missed).filter(word => retainedWords.has(word)));
+        practiceState.inefficient = new Set(Array.from(practiceState.inefficient).filter(word => retainedWords.has(word)));
+        practiceState.renderedStart = 0;
+        practiceState.renderedEnd = -1;
+        practiceState.lastScrolledIndex = -1;
+        practiceState.lastScrolledLineTop = -1;
+        practiceState.lockedScrollTop = 0;
+        practiceState.spokenPracticeIndex = -1;
+        document.getElementById('monkeyContainer').scrollTop = 0;
+        renderMonkeyText();
     }
 
     function orderQuoteTestQueue(quoteTest, mode) {
@@ -3085,7 +3383,7 @@ if ('serviceWorker' in navigator) {
         return [sorted.slice(-Math.min(10, sorted.length)).reverse().join(' ')];
     }
 
-    async function buildQuoteTestQueue(testMode) {
+    async function buildQuoteTestQueue(testMode, quoteCountOverride = null) {
         const source = document.getElementById('quoteLanguage').value;
         if (!source) throw new Error('Choose a quote language before starting this test.');
         const pool = await loadPracticeQuotes(source);
@@ -3093,7 +3391,7 @@ if ('serviceWorker' in navigator) {
 
         if (testMode === 'words') {
             const targetWords = Math.max(1, Math.min(MAX_PRACTICE_WORDS,
-                Number(document.getElementById('practiceTestWords').value) || 50));
+                quoteCountOverride ?? (Number(document.getElementById('practiceTestWords').value) || 50)));
             return buildRandomWordTestQueue(pool, source, targetWords);
         }
 
@@ -3109,7 +3407,7 @@ if ('serviceWorker' in navigator) {
         const remainingDailyWords = Math.max(0, wordGoal - getTodaysWordCount());
         const quoteCount = testMode === 'quote' ? 1
             : testMode === 'daily' ? remainingDailyQuotes
-                : testMode === 'quotes' ? Number(document.getElementById('practiceTestQuotes').value) || 5
+                : testMode === 'quotes' ? quoteCountOverride ?? (Number(document.getElementById('practiceTestQuotes').value) || 5)
                     : testMode === 'time'
                         ? Math.min(1000, Math.max(10, Math.ceil((Number(document.getElementById('practiceTestDuration').value) || 60) / 60 * 8) + 10))
                         : 0;
@@ -3805,12 +4103,8 @@ if ('serviceWorker' in navigator) {
             const digitCount = Math.max(1, Math.min(36, Number(document.getElementById('practiceNumberDigits').value) || 6));
             const format = document.getElementById('practiceNumberFormat').value;
             const groups = Array.from({ length: groupCount }, () => {
-                let digits = '';
-                for (let index = 0; index < digitCount; index++) {
-                    digits += String(index === 0 && digitCount > 1
-                        ? 1 + Math.floor(Math.random() * 9)
-                        : Math.floor(Math.random() * 10));
-                }
+                let digits = Array.from({ length: digitCount }, () => String(Math.floor(Math.random() * 10))).join('');
+                digits = digits.replace(/^0+(?=\d)/u, '');
                 const useWords = format === 'words' || (format === 'mixed' && Math.random() < 0.5);
                 return useWords ? numberToPracticeWords(digits) : digits;
             });
@@ -3845,6 +4139,10 @@ if ('serviceWorker' in navigator) {
         document.querySelectorAll('.test-symbol-setting').forEach(setting => {
             setting.hidden = mode !== 'symbols';
         });
+        const problematicCount = document.querySelector('.test-problematic-setting');
+        if (problematicCount) problematicCount.hidden = mode !== 'problematic';
+        const briefsCount = document.querySelector('.test-briefs-setting');
+        if (briefsCount) briefsCount.hidden = mode !== 'briefs';
         document.querySelectorAll('.test-language-setting').forEach(setting => {
             setting.hidden = ['numbers', 'symbols', 'jeff-phrasing', 'problematic', 'briefs'].includes(mode);
         });
@@ -3863,14 +4161,19 @@ if ('serviceWorker' in navigator) {
     }
 
     function getPracticeTestVariant(mode, targetCount = 0) {
+        const endless = ENDLESS_PRACTICE_MODES.has(mode) && getPracticeCountSelection(mode).endless;
+        const variantSuffix = endless ? '-endless' : '';
         if (mode === 'time') return `time-${document.getElementById('practiceTestDuration').value}s`;
         if (mode === 'words') return `words-${document.getElementById('practiceTestWords').value}`;
-        if (mode === 'quotes') return `quotes-${document.getElementById('practiceTestQuotes').value}-${document.getElementById('practiceQuoteLength').value}`;
+        if (mode === 'quotes') return `quotes-${endless ? 'endless' : document.getElementById('practiceTestQuotes').value}-${document.getElementById('practiceQuoteLength').value}`;
         if (mode === 'quote') return `quote-${document.getElementById('practiceQuoteLength').value}`;
-        if (mode === 'numbers') return `numbers-${targetCount || document.getElementById('practiceNumberGroups').value}-${document.getElementById('practiceNumberDigits').value}-${document.getElementById('practiceNumberFormat').value}`;
-        if (mode === 'symbols') return `symbols-${targetCount || document.getElementById('practiceSymbolCount').value}`;
-        if (mode === 'jeff-phrasing') return `jeff-phrasing-${targetCount || document.getElementById('jeffPhraseCount').value}-${document.getElementById('jeffPhraseForm').value}`;
-        return mode;
+        if (mode === 'numbers') return `numbers-${endless ? 'endless' : targetCount || document.getElementById('practiceNumberGroups').value}-${document.getElementById('practiceNumberDigits').value}-${document.getElementById('practiceNumberFormat').value}`;
+        if (mode === 'symbols') return `symbols-${endless ? 'endless' : targetCount || document.getElementById('practiceSymbolCount').value}`;
+        if (mode === 'jeff-phrasing') return `jeff-phrasing-${endless ? 'endless' : targetCount || document.getElementById('jeffPhraseCount').value}-${document.getElementById('jeffPhraseForm').value}`;
+        if (mode === 'problematic' || mode === 'briefs') {
+            return `${mode}-${endless ? 'endless' : getPracticeCountSelection(mode).count || 'all'}`;
+        }
+        return `${mode}${variantSuffix}`;
     }
 
     function getNextDailyGoalPractice() {
@@ -3926,28 +4229,51 @@ if ('serviceWorker' in navigator) {
 
     async function startPractice(dailyGoalTarget = 0) {
         const testMode = document.getElementById('practiceTestMode')?.value || 'lesson';
+        const countSelection = ENDLESS_PRACTICE_MODES.has(testMode)
+            ? getPracticeCountSelection(testMode)
+            : { endless: false, count: 0 };
+        const endlessMode = dailyGoalTarget <= 0 && countSelection.endless;
+        const selectedCount = dailyGoalTarget || countSelection.count;
+        const initialChunkSize = endlessMode ? ENDLESS_CHUNK_SIZE : selectedCount;
         let quoteTest = null;
+        let endlessPracticeListSnapshot = null;
         let text = document.getElementById('practiceMaterial').value;
         let mode = document.getElementById('practiceMode').value;
         if (testMode === 'jeff-phrasing') {
             try {
-                text = await buildJeffPhrasingMaterial(dailyGoalTarget);
+                text = await buildJeffPhrasingMaterial(initialChunkSize);
             } catch (error) {
                 openModal('Unable to start Jeff Phrasing', error.message, () => {});
                 return;
             }
             mode = 'ordered';
         } else if (testMode === 'numbers' || testMode === 'symbols') {
-            const words = buildGeneratedPracticeQueue(testMode, dailyGoalTarget);
+            const words = buildGeneratedPracticeQueue(testMode, initialChunkSize);
             quoteTest = { words, ranges: [], targetQuotes: 0, targetWords: words.length };
             mode = document.getElementById('practiceMode').value;
             text = words.join(' ');
         } else if (testMode === 'problematic' || testMode === 'briefs') {
-            text = await getPracticeListMaterial(testMode, dailyGoalTarget);
+            if (endlessMode) {
+                endlessPracticeListSnapshot = {
+                    ...(getPersistentProgress()[testMode] || {})
+                };
+            }
+            text = await getPracticeListMaterial(
+                testMode,
+                endlessMode ? ENDLESS_CHUNK_SIZE : selectedCount,
+                endlessPracticeListSnapshot
+            );
             mode = document.getElementById('practiceMode').value;
         } else if (testMode !== 'lesson') {
             try {
-                quoteTest = await buildQuoteTestQueue(testMode);
+                quoteTest = await buildQuoteTestQueue(
+                    testMode,
+                    endlessMode && testMode === 'quotes'
+                        ? ENDLESS_INITIAL_QUOTES
+                        : endlessMode && testMode === 'words'
+                            ? ENDLESS_CHUNK_SIZE
+                            : null
+                );
             } catch (error) {
                 openModal('Unable to start practice', error.message, () => {});
                 return;
@@ -3960,7 +4286,16 @@ if ('serviceWorker' in navigator) {
 
         savePracticeSettingsForProfile();
 
-        practiceState.isEndless = false;
+        practiceState.isEndless = endlessMode;
+        practiceState.endlessPracticeListSnapshot = endlessPracticeListSnapshot;
+        practiceState.endlessRefillInProgress = false;
+        practiceState.endlessRefillFailed = false;
+        practiceState.endlessCompletedItems = 0;
+        practiceState.endlessCompletedWordUnits = 0;
+        practiceState.endlessCorrectCharacters = 0;
+        practiceState.endlessTotalStrokes = 0;
+        practiceState.endlessAttemptedWordUnits = 0;
+        practiceState.endlessCorrectWordUnits = 0;
         practiceState.blindMode = Boolean(settings.profiles[settings.activeProfile].blindMode);
         practiceState.blindModeType = 'wait';
         practiceState.blindWpm = 60;
@@ -3975,6 +4310,16 @@ if ('serviceWorker' in navigator) {
                 ? orderGeneratedPracticeWords(quoteTest.words, mode)
                 : quoteTest.words)
             : generatePracticeQueue(text, mode);
+        if (endlessMode && ENDLESS_LIST_PRACTICE_MODES.has(testMode)) {
+            practiceState.words = cyclePracticeQueue(
+                practiceState.words,
+                ENDLESS_CHUNK_SIZE,
+                mode === 'random' || mode === 'random-pyramid'
+            );
+        }
+        if (endlessMode && testMode !== 'quotes') {
+            practiceState.words = practiceState.words.slice(0, ENDLESS_CHUNK_SIZE);
+        }
         if (quoteTest) practiceState.customDict = null;
         const persistentProgress = getPersistentProgress();
         practiceState.problematicWordSet = new Set(Object.keys(persistentProgress.problematic || {}).map(word => word.toLowerCase()));
@@ -4050,6 +4395,7 @@ if ('serviceWorker' in navigator) {
         });
         hideLoader();
         practiceState.currentIndex = 0;
+        practiceState.inputStartIndex = 0;
         practiceState.lastScrolledIndex = -1;
         practiceState.statsIndex = 0;
         practiceState.statsCorrectChars = 0;
@@ -4057,7 +4403,7 @@ if ('serviceWorker' in navigator) {
         practiceState.statsTotalStrokes = 0;
         practiceState.currentStreak = 0;
         practiceState.longestStreak = 0;
-        practiceState.wordScores = [];
+        practiceState.wordScores = new Array(practiceState.words.length).fill(0);
         practiceState.correctPracticeIndices = new Set();
         practiceState.mistakePracticeIndices = new Set();
         practiceState.mode = mode;
@@ -4102,9 +4448,10 @@ if ('serviceWorker' in navigator) {
         practiceState.dailyGoalReached = false;
         practiceState.completedQuotes = 0;
         practiceState.targetQuotes = quoteTest?.targetQuotes || 0;
-        practiceState.targetWordCount = quoteTest
+        practiceState.targetWordCount = endlessMode ? 0 : quoteTest
             ? (['words', 'numbers', 'symbols'].includes(testMode) ? practiceState.words.length : quoteTest.targetWords || 0)
             : 0;
+        if (endlessMode && testMode === 'quotes') practiceState.targetQuotes = 0;
         practiceState.timeLimitSeconds = testMode === 'time' ? Number(document.getElementById('practiceTestDuration').value) || 60 : 0;
         practiceState.timeRemaining = practiceState.timeLimitSeconds;
         practiceState.sessionEnding = false;
@@ -4162,11 +4509,13 @@ if ('serviceWorker' in navigator) {
     }
 
     function getLiveTestStatus() {
-        if (practiceState.awaitingNextQuote && practiceState.testMode === 'daily' && practiceState.dailyGoalReached) {
-            return 'Daily goal reached! Press Enter to continue, or Esc to finish.';
-        }
+        const completedItems = practiceState.endlessCompletedItems
+            + Math.min(practiceState.currentIndex, practiceState.words.length);
+        const completedWords = practiceState.statsIndex;
         if (practiceState.awaitingNextQuote && isContinuousQuoteMode()) {
-            return 'Quote complete. Press Enter for the next quote, or End test to finish.';
+            return practiceState.testMode === 'daily' && practiceState.dailyGoalReached
+                ? 'Daily goal reached! Loading the next quote…'
+                : 'Quote complete. Loading the next quote…';
         }
         if (practiceState.testMode === 'time') {
             const seconds = Math.max(0, practiceState.timeRemaining);
@@ -4178,21 +4527,29 @@ if ('serviceWorker' in navigator) {
             return `Quotes ${goal.todayQuotes} / ${goal.quoteGoal} · Words ${goal.todayWords.toLocaleString()} / ${goal.wordGoal.toLocaleString()}`;
         }
         if (practiceState.testMode === 'quotes') {
-            return `Quotes ${Math.min(practiceState.completedQuotes, practiceState.targetQuotes)} / ${practiceState.targetQuotes}`;
+            return practiceState.isEndless
+                ? `Quotes ${practiceState.completedQuotes} · endless`
+                : `Quotes ${Math.min(practiceState.completedQuotes, practiceState.targetQuotes)} / ${practiceState.targetQuotes}`;
         }
         if (practiceState.testMode === 'words') {
             return `Words ${Math.min(practiceState.statsIndex, practiceState.targetWordCount)} / ${practiceState.targetWordCount}`;
         }
         if (practiceState.testMode === 'jeff-phrasing') {
-            return `Phrases ${Math.min(practiceState.currentIndex, practiceState.words.length)} / ${practiceState.words.length}`;
+            return practiceState.isEndless
+                ? `Phrases ${completedItems} · endless`
+                : `Phrases ${Math.min(practiceState.currentIndex, practiceState.words.length)} / ${practiceState.words.length}`;
         }
         if (practiceState.testMode === 'numbers' || practiceState.testMode === 'symbols') {
             const label = practiceState.testMode === 'numbers' ? 'Number items' : 'Symbols';
-            return `${label} ${Math.min(practiceState.statsIndex, practiceState.targetWordCount)} / ${practiceState.targetWordCount}`;
+            return practiceState.isEndless
+                ? `${label} ${completedWords} · endless`
+                : `${label} ${Math.min(practiceState.statsIndex, practiceState.targetWordCount)} / ${practiceState.targetWordCount}`;
         }
         if (practiceState.testMode === 'problematic' || practiceState.testMode === 'briefs') {
             const label = practiceState.testMode === 'problematic' ? 'Problematic words' : 'Briefs';
-            return `${label} ${Math.min(practiceState.statsIndex, practiceState.words.length)} / ${practiceState.words.length}`;
+            return practiceState.isEndless
+                ? `${label} ${completedWords} · endless`
+                : `${label} ${Math.min(practiceState.statsIndex, practiceState.words.length)} / ${practiceState.words.length}`;
         }
         return '';
     }
@@ -4222,7 +4579,18 @@ if ('serviceWorker' in navigator) {
             renderPracticeDashboard();
         }
         const status = document.getElementById('liveTestStatus');
-        if (completedQuote && isContinuousQuoteMode()) practiceState.awaitingNextQuote = true;
+        if (completedQuote && practiceState.testMode === 'quotes') {
+            const hasNextQuote = practiceState.quoteRanges.some(
+                range => range.start >= practiceState.currentIndex && !range.completed
+            );
+            if (hasNextQuote || practiceState.isEndless) {
+                practiceState.awaitingNextQuote = true;
+                advancePracticeQuote();
+            }
+        } else if (completedQuote && practiceState.testMode === 'daily') {
+            practiceState.awaitingNextQuote = true;
+            advancePracticeQuote();
+        }
         if (practiceState.testMode === 'daily') {
             calculateLiveStats();
             const goal = updateDailyGoalProgress(progress);
@@ -4250,6 +4618,10 @@ if ('serviceWorker' in navigator) {
         }
 
         const start = practiceState.words.length;
+        const limits = await Promise.all(Array.from(new Set(tokens), async token => [
+            token,
+            await getStrokeLimitsAndOutlines(token)
+        ]));
         practiceState.words.push(...tokens);
         practiceState.quoteRanges.push({ start, end: start + tokens.length, text, complete: true, completed: false });
         for (const token of tokens) {
@@ -4257,14 +4629,37 @@ if ('serviceWorker' in navigator) {
             practiceState.typedWords.push('');
             practiceState.strokeCounts.push(0);
             practiceState.wordUnitCounts.push(isPracticePunctuation(token) ? 0 : 1);
-            practiceState.maxStrokesMap[token] = await getStrokeLimitsAndOutlines(token);
         }
+        for (const [token, result] of limits) practiceState.maxStrokesMap[token] = result;
         return start;
     }
 
+    async function ensureEndlessPracticeQuotesLoaded() {
+        if (!practiceState.isEndless
+            || practiceState.testMode !== 'quotes'
+            || practiceState.endlessRefillInProgress
+            || practiceState.endlessRefillFailed
+            || practiceState.sessionEnding) return;
+
+        practiceState.endlessRefillInProgress = true;
+        try {
+            while (practiceState.quoteRanges.filter(range => !range.completed).length < ENDLESS_INITIAL_QUOTES) {
+                await appendPracticeQuote();
+                if (practiceState.sessionEnding) return;
+            }
+        } catch (error) {
+            practiceState.endlessRefillFailed = true;
+            openModal('Unable to load more practice', error.message, () => {});
+        } finally {
+            practiceState.endlessRefillInProgress = false;
+        }
+    }
+
     async function advancePracticeQuote() {
-        if (!isContinuousQuoteMode() || practiceState.sessionEnding) return;
+        if ((!isContinuousQuoteMode() && practiceState.testMode !== 'quotes') || practiceState.sessionEnding) return;
         let nextRange = practiceState.quoteRanges.find(range => range.start >= practiceState.currentIndex && !range.completed);
+        if (!nextRange && practiceState.testMode === 'quotes' && !practiceState.isEndless) return;
+        if (!nextRange && practiceState.testMode === 'quotes' && practiceState.endlessRefillFailed) return;
         try {
             if (!nextRange) {
                 const start = await appendPracticeQuote();
@@ -4277,6 +4672,7 @@ if ('serviceWorker' in navigator) {
         if (!nextRange) return;
 
         practiceState.awaitingNextQuote = false;
+        practiceState.inputStartIndex = nextRange.start;
         practiceState.currentIndex = nextRange.start;
         practiceState.typedEndIndex = nextRange.start - 1;
         practiceState.lastCompletedIndex = nextRange.start - 1;
@@ -4292,6 +4688,12 @@ if ('serviceWorker' in navigator) {
         practiceState.lastScrolledLineTop = -1;
         practiceState.lockedScrollTop = 0;
         document.getElementById('practiceInput').value = '';
+        if (practiceState.isEndless && practiceState.testMode === 'quotes' && nextRange.start > 0) {
+            pruneEndlessPracticeQueue(nextRange.start);
+        }
+        if (practiceState.isEndless && practiceState.testMode === 'quotes') {
+            void ensureEndlessPracticeQuotesLoaded();
+        }
         document.getElementById('monkeyContainer').scrollTop = 0;
         renderMonkeyText();
         document.getElementById('practiceInput').focus();
@@ -4357,6 +4759,11 @@ if ('serviceWorker' in navigator) {
         document.getElementById('monkeyContainer').scrollTop = 0;
         practiceState.lockedScrollTop = 0;
 
+        let straightQuoteOpen = false;
+        for (let index = 0; index < startIndex; index++) {
+            if (practiceState.words[index] === '"') straightQuoteOpen = !straightQuoteOpen;
+        }
+
         for (let index = startIndex; index <= endIndex; index++) {
             if (index > 0 && practiceState.quoteRanges.some(range => range.start === index)) {
                 const quoteBreak = document.createElement('div');
@@ -4366,6 +4773,8 @@ if ('serviceWorker' in navigator) {
             }
             const word = practiceState.words[index];
             const isPunct = isPracticePunctuation(word);
+            const isOpeningStraightQuote = word === '"' && !straightQuoteOpen;
+            if (word === '"') straightQuoteOpen = !straightQuoteOpen;
             // If punctuation should be ignored visually, skip rendering its characters entirely
             if (isPunct && ignorePunct) {
                 // still create a placeholder container so id lookups remain consistent
@@ -4377,7 +4786,10 @@ if ('serviceWorker' in navigator) {
             }
 
             const wordDiv = document.createElement('div');
-            wordDiv.className = 'monkey-word' + (isPunct ? ' punct' : '');
+            const punctuationSpacingClass = isOpeningStraightQuote || isPracticeOpeningPunctuation(word)
+                ? ' punct-open'
+                : isPracticeClosingPunctuation(word) || word === '"' ? ' punct-close' : '';
+            wordDiv.className = 'monkey-word' + (isPunct ? ` punct${punctuationSpacingClass}` : '');
             if (practiceState.testMode === 'jeff-phrasing') wordDiv.classList.add('jeff-phrase-word');
             const wordKey = String(word).toLowerCase();
             if (practiceState.problematicWordSet.has(wordKey)) {
@@ -4450,14 +4862,13 @@ if ('serviceWorker' in navigator) {
         const container = document.getElementById('monkeyContainer');
         if (!container) return;
 
-        // Non-trigger words must never be able to move the viewport.
-        if (!practiceState.scrollTriggerIndices.has(practiceState.currentIndex)) {
+        const movingBackward = practiceState.currentIndex < practiceState.lastScrolledIndex;
+        if (!practiceState.scrollTriggerIndices.has(practiceState.currentIndex) && !movingBackward) {
             container.scrollTop = practiceState.lockedScrollTop;
             return;
         }
 
-        // Never move the viewport backward when the user erases input.
-        if (practiceState.currentIndex <= practiceState.lastScrolledIndex) {
+        if (!movingBackward && practiceState.currentIndex <= practiceState.lastScrolledIndex) {
             container.scrollTop = practiceState.lockedScrollTop;
             return;
         }
@@ -4468,11 +4879,13 @@ if ('serviceWorker' in navigator) {
         const lineHeight = parseFloat(getComputedStyle(activeWord).lineHeight) || 43;
 
         practiceState.lastScrolledIndex = practiceState.currentIndex;
-        const lineTop = practiceState.scrollTriggerTops[practiceState.currentIndex];
+        const lineTop = practiceState.scrollTriggerTops[practiceState.currentIndex] ?? activeWord.offsetTop;
         practiceState.lastScrolledLineTop = lineTop;
 
         const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
-        const targetTop = Math.min(maxScrollTop, Math.max(container.scrollTop, lineTop - lineHeight));
+        const targetTop = movingBackward
+            ? Math.max(0, Math.min(maxScrollTop, lineTop - lineHeight))
+            : Math.min(maxScrollTop, Math.max(container.scrollTop, lineTop - lineHeight));
         practiceState.lockedScrollTop = targetTop;
         container.scrollTop = targetTop;
 
@@ -4529,7 +4942,7 @@ if ('serviceWorker' in navigator) {
         renderTypedExtras();
 
         const startIdx = practiceState.renderedStart;
-        const endIdx = Math.min(practiceState.words.length - 1, Math.max(practiceState.currentIndex, practiceState.typedEndIndex));
+        const endIdx = Math.min(practiceState.words.length - 1, practiceState.renderedEnd);
         const ignoreCaps = practiceState.ignoreCaps;
         const ignorePunct = practiceState.ignorePunct;
 
@@ -4557,6 +4970,42 @@ if ('serviceWorker' in navigator) {
                 });
             } else if (i === practiceState.currentIndex) {
                 wordDiv.classList.add('active');
+                const isPunct = isPracticePunctuation(targetWord);
+                const renderedLetters = [];
+                for (let targetIndex = 0; targetIndex < targetWord.length; targetIndex++) {
+                    const targetChar = targetWord[targetIndex];
+                    const typedChar = typed[targetIndex];
+                    const span = document.createElement('span');
+                    span.className = 'letter';
+                    span.classList.toggle(
+                        'blind-hidden',
+                        practiceState.blindMode && typedChar === undefined
+                    );
+                    if (isPunct && ignorePunct) {
+                        span.textContent = '';
+                    } else if (typedChar !== undefined) {
+                        const equal = !/\s/u.test(typedChar) && (ignoreCaps
+                            ? typedChar.toLowerCase() === targetChar.toLowerCase()
+                            : typedChar === targetChar);
+                        span.classList.toggle('correct', equal);
+                        span.classList.toggle('incorrect', !equal);
+                        span.textContent = /\s/u.test(typedChar)
+                            ? (ignoreCaps ? targetChar.toLowerCase() : targetChar)
+                            : (ignoreCaps ? typedChar.toLowerCase() : typedChar);
+                    } else {
+                        span.textContent = ignoreCaps ? targetChar.toLowerCase() : targetChar;
+                    }
+                    renderedLetters.push(span);
+                }
+
+                for (let typedIndex = targetWord.length; typedIndex < typed.length; typedIndex++) {
+                    const extra = document.createElement('span');
+                    const typedChar = typed[typedIndex];
+                    extra.className = `letter ${/\s/u.test(typedChar) ? 'incorrect' : 'extra'}`;
+                    extra.textContent = ignoreCaps ? typedChar.toLowerCase() : typedChar;
+                    renderedLetters.push(extra);
+                }
+                wordDiv.replaceChildren(...renderedLetters);
             } else {
                 wordDiv.classList.remove('active', 'error');
                 const ignoreCapsAhead = practiceState.ignoreCaps;
@@ -4589,6 +5038,8 @@ if ('serviceWorker' in navigator) {
             if (existingCursor) existingCursor.remove();
 
             const letters = Array.from(wordDiv.children).filter(el => !el.classList.contains('monkey-cursor'));
+
+            if (i === practiceState.currentIndex) continue;
 
             const isPunct = isPracticePunctuation(targetWord);
 
@@ -4661,9 +5112,14 @@ if ('serviceWorker' in navigator) {
         if (cursorHost) {
             const cursor = document.createElement('span');
             cursor.className = 'monkey-cursor';
+            const activeTypedText = practiceState.typedWords[practiceState.currentIndex] || '';
+            const activeTarget = String(practiceState.words[practiceState.currentIndex] || '');
+            const activeCursorLength = activeTarget.includes(' ')
+                ? activeTypedText.length
+                : activeTypedText.length;
             const cursorIndex = practiceState.extraTypedWords.length > 0
                 ? practiceState.extraTypedWords.join(' ').length
-                : Math.min((practiceState.typedWords[practiceState.currentIndex] || '').length, cursorHost.children.length);
+                : Math.min(activeCursorLength, cursorHost.children.length);
             const letters = Array.from(cursorHost.children).filter(el => !el.classList.contains('monkey-cursor'));
             cursorHost.insertBefore(cursor, letters[cursorIndex] || null);
         }
@@ -4766,23 +5222,37 @@ if ('serviceWorker' in navigator) {
         const now = performance.now();
 
         const input = document.getElementById('practiceInput');
-        const rawInputVal = input.value;
-        let inputVal = rawInputVal.normalize('NFC');
-        if (inputVal !== rawInputVal) {
-            const caret = input.selectionStart;
-            input.value = inputVal;
-            const normalizedCaret = rawInputVal.slice(0, caret).normalize('NFC').length;
-            input.setSelectionRange(normalizedCaret, normalizedCaret);
-        }
-        let previousInput = practiceState.lastInputValue;
+        let rawInputVal = input.value;
+        const previousInput = practiceState.lastInputValue;
         const inputType = event.inputType || '';
         const isInsertion = !inputType || inputType.startsWith('insert');
+        if (isInsertion && typeof event.data === 'string' && /^\s+$/u.test(event.data)
+            && rawInputVal === previousInput
+            && input.selectionStart === rawInputVal.length
+            && input.selectionEnd === rawInputVal.length) {
+            input.setRangeText(event.data, input.selectionStart, input.selectionEnd, 'end');
+            rawInputVal = input.value;
+        }
+        let inputVal = rawInputVal.normalize('NFC');
+        if (inputVal !== rawInputVal) {
+            const selectionStart = input.selectionStart;
+            const selectionEnd = input.selectionEnd;
+            input.value = inputVal;
+            const normalizedStart = rawInputVal.slice(0, selectionStart).normalize('NFC').length;
+            const normalizedEnd = rawInputVal.slice(0, selectionEnd).normalize('NFC').length;
+            input.setSelectionRange(normalizedStart, normalizedEnd);
+        }
         const isDeletion = inputType.startsWith('delete');
-        const insertedSpace = isInsertion && /\s$/.test(inputVal);
-        const deletedSpace = isDeletion && /\s$/.test(previousInput);
-        const strokeKind = isDeletion ? 'delete' : 'insert';
-        const isStrokeChange = inputVal !== previousInput && (isInsertion || isDeletion) && !insertedSpace && !deletedSpace;
-        const isDeleteChange = isDeletion && inputVal !== previousInput;
+        const insertedSpace = isInsertion
+            && (/\s$/u.test(inputVal) || /^\s+$/u.test(event.data || ''));
+        const insertedOnlySpace = isInsertion && inputVal.startsWith(previousInput)
+            && /^\s+$/u.test(inputVal.slice(previousInput.length));
+
+        if (!forceSnapshot && inputVal !== previousInput
+            && (isDeletion || (isInsertion && inputVal.trim() && !insertedOnlySpace))) {
+            practiceState.pendingSnapshotInputType = isDeletion ? 'deleteContentBackward' : 'insertText';
+            schedulePracticeSnapshotCheck();
+        }
 
         if (!practiceState.sessionStartTime && isInsertion && inputVal.trim()) {
             practiceState.sessionStartTime = now;
@@ -4790,55 +5260,7 @@ if ('serviceWorker' in navigator) {
         }
         if (isInsertion && inputVal.trim()) startActiveQuoteTiming();
 
-        if (isInsertion && inputVal.trim() && !forceSnapshot && !insertedSpace) {
-            practiceState.logicalInput = inputVal;
-            practiceState.lastInputValue = inputVal;
-            const activeWord = practiceState.words[practiceState.currentIndex];
-            const activeTypedText = String(activeWord || '').includes(' ')
-                ? inputVal
-                : (inputVal.match(/\S*$/) || [''])[0];
-            if (activeWord) {
-                practiceState.typedWords[practiceState.currentIndex] = activeTypedText;
-                practiceState.typedEndIndex = practiceState.currentIndex;
-                const normalizedTarget = practiceState.normalizedWords[practiceState.currentIndex]
-                    || normalizeForComparison(activeWord);
-                const normalizedTyped = normalizeForComparison(activeTypedText);
-                practiceState.mismatchIndex = normalizedTarget.startsWith(normalizedTyped)
-                    ? -1
-                    : practiceState.currentIndex;
-            }
-            practiceState.pendingSnapshotInputType = 'insertText';
-            schedulePracticeSnapshotCheck();
-            schedulePracticeVisualUpdate();
-            return;
-        }
-
-        if (inputVal !== previousInput) {
-        }
-
-        if (isDeletion) {
-            practiceState.logicalInput = inputVal;
-            if (practiceState.currentIndex < practiceState.words.length) {
-                practiceState.typedWords[practiceState.currentIndex] = inputVal;
-                practiceState.mismatchIndex = -1;
-                practiceState.extraTypedWords = [];
-            }
-            practiceState.lastInputValue = inputVal;
-            if (!forceSnapshot) {
-                practiceState.pendingSnapshotInputType = 'deleteContentBackward';
-                schedulePracticeSnapshotCheck();
-            }
-            schedulePracticeVisualUpdate();
-            return;
-        }
-
         practiceState.logicalInput = inputVal;
-
-        if (isInsertion && inputVal.trim() === '' && inputVal.length > 0) {
-            input.value = '';
-            practiceState.lastInputValue = '';
-            return;
-        }
 
         if (isInsertion && practiceState.pendingEraseTimer) {
             clearTimeout(practiceState.pendingEraseTimer);
@@ -4847,90 +5269,45 @@ if ('serviceWorker' in navigator) {
 
         practiceState.lastInputValue = inputVal;
 
-        // Split into non-empty segments so spaces inside Typey Type phrases
-        // can be consumed as part of one practice target.
+        // Keep the entire textarea value so spaces and edits remain literal.
         const typedArray = inputVal.match(/\S+/g) || [];
-        const isMultiWordInsertion = isInsertion && typedArray.length > 1;
-        // Map typed segments to token-wise typedWords (support glued punctuation like "another.")
+        const typedTokenMatches = Array.from(inputVal.matchAll(/\S+/gu));
+        const insertedText = isInsertion && inputVal.startsWith(previousInput)
+            ? inputVal.slice(previousInput.length)
+            : (isInsertion && typeof event.data === 'string' ? event.data : inputVal);
+        const isMultiWordInsertion = isInsertion && (insertedText.match(/\S+/g) || []).length > 1;
         const words = practiceState.words || [];
-        if (insertedSpace && inputVal.trim()) {
-            practiceState.pendingSnapshotInputType = 'insertText';
-            schedulePracticeSnapshotCheck();
-        }
-
-        // Most input events only change the current single-word token. Avoid
-        // rescanning the complete lesson until a boundary or special case occurs.
         const currentTarget = words[practiceState.currentIndex];
-        const currentSegmentMatch = inputVal.match(/\S*$/);
-        const currentSegment = currentSegmentMatch ? currentSegmentMatch[0] : '';
-
-        // A space after a mistyped ordinary word must stay on the current word.
-        // Sending it through the legacy parser would rescan from index zero.
-        if (insertedSpace && typedArray.length <= 1 && currentTarget && !/\s/.test(currentTarget) && inputVal.trim()) {
-            const completedSegment = inputVal.trim();
-            const normalizedTarget = practiceState.normalizedWords[practiceState.currentIndex] || normalizeForComparison(currentTarget);
-            const segmentTokens = tokenizePracticeText(completedSegment);
-            const tokenizedMatchesTargets = segmentTokens.length > 1 &&
-                segmentTokens.length <= words.length - practiceState.currentIndex &&
-                segmentTokens.every((token, offset) => {
-                    const targetIndex = practiceState.currentIndex + offset;
-                    const target = words[targetIndex];
-                    return target !== undefined &&
-                        normalizeForComparison(token) === (practiceState.normalizedWords[targetIndex] || normalizeForComparison(target));
-                });
-            if (normalizeForComparison(completedSegment) === normalizedTarget || tokenizedMatchesTargets) {
-                const completedTokens = tokenizedMatchesTargets ? segmentTokens : [completedSegment];
-                completedTokens.forEach((token, offset) => {
-                    const targetIndex = practiceState.currentIndex + offset;
-                    practiceState.typedWords[targetIndex] = token;
-                    if (!practiceState.completedIndices.has(targetIndex)) {
-                        practiceState.completedIndices.add(targetIndex);
-                        registerCorrectPracticeWord(words[targetIndex]);
-                    }
-                    recordCompletedPracticeWord(targetIndex, token);
-                });
-                practiceState.logicalInput = completedSegment;
-                practiceState.lastCompletedIndex = practiceState.currentIndex + completedTokens.length - 1;
-                practiceState.currentIndex += completedTokens.length;
-                if (practiceState.ignorePunct) {
-                    while (practiceState.currentIndex < words.length && isPracticePunctuation(words[practiceState.currentIndex])) {
-                        practiceState.currentIndex++;
-                    }
-                }
-                practiceState.mismatchIndex = -1;
-                completeReachedPracticeQuotes();
-                input.value = '';
-                practiceState.lastInputValue = '';
-                practiceState.lastStrokeKind = '';
-                practiceState.lastStrokeTime = 0;
-                practiceState.extraTypedWords = [];
-            } else {
-                practiceState.logicalInput = completedSegment;
-                practiceState.lastInputValue = inputVal;
-                practiceState.typedWords[practiceState.currentIndex] = completedSegment;
-                practiceState.mismatchIndex = -1;
-                practiceState.extraTypedWords = [];
-                const usedStrokes = getPracticeStrokeCountIncludingPending(practiceState.currentIndex);
-                if (usedStrokes >= getSelectedPracticeStrokeLimit(currentTarget)) {
-                    practiceState.incorrectWordIndices.add(practiceState.currentIndex);
-                    practiceState.eraseErrorWords.add(currentTarget);
-                    registerProblemPracticeWord(currentTarget);
-                    practiceState.currentStreak = 0;
-                    playPracticeFeedback('miss');
-                    refreshPracticeAccuracy();
-                }
+        const activePartial = practiceState.typedWords[practiceState.currentIndex] || '';
+        const insertedPunctuation = typeof event.data === 'string'
+            && tokenizePracticeText(event.data).some(isPracticePunctuation);
+        const activePunctuationCanContinue = isPracticeOpeningPunctuation(currentTarget)
+            || currentTarget === '"';
+        let updatedActiveText = null;
+        if (isInsertion && !forceSnapshot && inputVal.startsWith(previousInput)
+            && previousInput.length > 0 && typeof event.data === 'string'
+            && event.data.length > 0 && activePartial) {
+            updatedActiveText = activePartial + event.data;
+        } else if (isDeletion && activePartial && previousInput.endsWith(activePartial)) {
+            const activeInputStart = previousInput.length - activePartial.length;
+            if (inputVal.slice(0, activeInputStart) === previousInput.slice(0, activeInputStart)) {
+                updatedActiveText = inputVal.slice(activeInputStart);
             }
-            schedulePracticeVisualUpdate();
-            if (practiceState.currentIndex >= words.length && !isContinuousQuoteMode()) endPractice();
-            return;
         }
-
-        if (!insertedSpace && !deletedSpace && typedArray.length <= 1 && currentTarget && !/\s/.test(currentTarget) && !forceSnapshot) {
-            const normalizedTarget = practiceState.normalizedWords[practiceState.currentIndex] || normalizeForComparison(currentTarget);
-            const normalizedSegment = normalizeForComparison(currentSegment);
-            practiceState.typedWords[practiceState.currentIndex] = currentSegment;
+        if (updatedActiveText !== null && isInsertion && !forceSnapshot && currentTarget
+            && !String(currentTarget).includes(' ')
+            && !(isPracticePunctuation(currentTarget) && /^\s+$/u.test(event.data || ''))
+            && !(isInsertion && /^\s+$/u.test(event.data || '')
+                && normalizeForComparison(activePartial) === normalizeForComparison(currentTarget))
+            && !insertedPunctuation
+            && !activePunctuationCanContinue
+            && normalizeForComparison(updatedActiveText) !== normalizeForComparison(currentTarget)) {
+            const activeTypedText = updatedActiveText;
+            practiceState.typedWords[practiceState.currentIndex] = activeTypedText;
             practiceState.typedEndIndex = practiceState.currentIndex;
-            practiceState.mismatchIndex = normalizedTarget.startsWith(normalizedSegment)
+            const normalizedTarget = practiceState.normalizedWords[practiceState.currentIndex]
+                || normalizeForComparison(currentTarget);
+            practiceState.mismatchIndex = normalizedTarget.startsWith(normalizeForComparison(activeTypedText))
                 ? -1
                 : practiceState.currentIndex;
             practiceState.extraTypedWords = [];
@@ -4938,13 +5315,44 @@ if ('serviceWorker' in navigator) {
             return;
         }
 
-        const typedPerToken = practiceState.typedWords.slice();
-        let wIdx = practiceState.currentIndex;
+        const inputStartIndex = Math.min(practiceState.inputStartIndex || 0, words.length);
+        const spacingMismatchIndex = findPracticeSpacingMismatch(inputVal, words, inputStartIndex);
+        const typedPerToken = practiceState.typedWords.slice(0, words.length);
+        while (typedPerToken.length < words.length) typedPerToken.push('');
+        typedPerToken.fill('', inputStartIndex);
+        let wIdx = inputStartIndex;
         let tIdx = 0;
-        const mappingStartIndex = wIdx;
         let firstMismatch = -1;
-        let completedItem = false;
+        let hasIncompleteTarget = false;
+        const matchedIndices = new Set();
         while (tIdx < typedArray.length && wIdx < words.length) {
+            if (practiceState.ignorePunct && practiceState.testMode !== 'symbols' && isPracticePunctuation(words[wIdx])) {
+                wIdx++;
+                continue;
+            }
+            if (spacingMismatchIndex === wIdx) {
+                const tokenMatch = typedTokenMatches[tIdx];
+                const previousTokenMatch = typedTokenMatches[tIdx - 1];
+                const gapStart = previousTokenMatch
+                    ? previousTokenMatch.index + previousTokenMatch[0].length
+                    : 0;
+                const unexpectedGap = tokenMatch
+                    ? inputVal.slice(gapStart, tokenMatch.index)
+                    : inputVal;
+                const previousTarget = String(words[wIdx - 1] || '');
+                const currentWord = String(words[wIdx] || '');
+                const expectsSeparator = previousTokenMatch
+                    && currentWord !== '"'
+                    && previousTarget !== '"'
+                    && !isPracticeClosingPunctuation(currentWord)
+                    && !isPracticeOpeningPunctuation(previousTarget);
+                const errorGap = expectsSeparator && /^\s+$/u.test(unexpectedGap)
+                    ? unexpectedGap.replace(/^\s/u, '')
+                    : unexpectedGap;
+                typedPerToken[wIdx] = errorGap + (typedArray[tIdx] || '');
+                firstMismatch = wIdx;
+                break;
+            }
             const target = String(words[wIdx]);
             const targetParts = target.split(/\s+/).filter(Boolean);
             const typedParts = typedArray.slice(tIdx, tIdx + targetParts.length);
@@ -4956,6 +5364,7 @@ if ('serviceWorker' in navigator) {
                 const phraseTyped = typedParts.join(' ');
                 if (hasAllParts && normalizeForComparison(phraseTyped) === normalizedTarget) {
                     typedPerToken[wIdx] = phraseTyped;
+                    matchedIndices.add(wIdx);
                     if (isMultiWordInsertion && tIdx > 0) practiceState.strokeCounts[wIdx] = 0;
                     if (!practiceState.completedIndices.has(wIdx)) {
                         practiceState.completedIndices.add(wIdx);
@@ -4963,14 +5372,14 @@ if ('serviceWorker' in navigator) {
                     }
                     recordCompletedPracticeWord(wIdx, phraseTyped);
                     practiceState.lastCompletedIndex = wIdx;
-                    completedItem = true;
                     tIdx += targetParts.length;
                     wIdx++;
-                    break;
+                    continue;
                 }
 
                 if (phraseTyped && normalizedTarget.startsWith(normalizeForComparison(phraseTyped))) {
                     typedPerToken[wIdx] = phraseTyped;
+                    hasIncompleteTarget = true;
                     break;
                 }
 
@@ -4985,6 +5394,7 @@ if ('serviceWorker' in navigator) {
             const seg = typedArray[tIdx];
             if (normalizeForComparison(seg) === normalizedTarget) {
                 typedPerToken[wIdx] = seg;
+                matchedIndices.add(wIdx);
                 if (!practiceState.completedIndices.has(wIdx)) {
                     practiceState.completedIndices.add(wIdx);
                     registerCorrectPracticeWord(target);
@@ -4997,6 +5407,17 @@ if ('serviceWorker' in navigator) {
                 continue;
             }
 
+            if (normalizedTarget.startsWith(normalizeForComparison(seg))) {
+                typedPerToken[wIdx] = inputVal.slice(typedTokenMatches[tIdx].index);
+                if (tIdx + 1 < typedArray.length) {
+            firstMismatch = wIdx;
+            tIdx = typedArray.length;
+                } else {
+            hasIncompleteTarget = true;
+                }
+                break;
+            }
+
             const segmentTokens = tokenizePracticeText(seg);
             const tokenizedMatchesTargets = segmentTokens.length > 1 &&
                 segmentTokens.length <= words.length - wIdx &&
@@ -5007,10 +5428,15 @@ if ('serviceWorker' in navigator) {
                         normalizeForComparison(token) === (practiceState.normalizedWords[targetIndex] || normalizeForComparison(tokenTarget));
                 });
             if (tokenizedMatchesTargets) {
-                segmentTokens.forEach((token, offset) => {
+                const validTokenCount = spacingMismatchIndex >= wIdx
+                    && spacingMismatchIndex < wIdx + segmentTokens.length
+                    ? spacingMismatchIndex - wIdx
+                    : segmentTokens.length;
+                segmentTokens.slice(0, validTokenCount).forEach((token, offset) => {
                     const targetIndex = wIdx + offset;
                     const tokenTarget = words[targetIndex];
                     typedPerToken[targetIndex] = token;
+                    matchedIndices.add(targetIndex);
                     if (!practiceState.completedIndices.has(targetIndex)) {
                         practiceState.completedIndices.add(targetIndex);
                         registerCorrectPracticeWord(tokenTarget);
@@ -5018,9 +5444,14 @@ if ('serviceWorker' in navigator) {
                     recordCompletedPracticeWord(targetIndex, token);
                     if (isMultiWordInsertion && (tIdx > 0 || offset > 0)) practiceState.strokeCounts[targetIndex] = 0;
                 });
-                practiceState.lastCompletedIndex = wIdx + segmentTokens.length - 1;
+                practiceState.lastCompletedIndex = wIdx + validTokenCount - 1;
                 tIdx++;
-                wIdx += segmentTokens.length;
+                wIdx += validTokenCount;
+                if (validTokenCount < segmentTokens.length) {
+                    firstMismatch = spacingMismatchIndex;
+                    typedPerToken[firstMismatch] = segmentTokens[validTokenCount] || '';
+                    break;
+                }
                 continue;
             }
 
@@ -5031,9 +5462,36 @@ if ('serviceWorker' in navigator) {
             break;
         }
 
+        const trailingWhitespace = inputVal.match(/\s+$/u)?.[0] || '';
+        if (firstMismatch < 0 && trailingWhitespace && wIdx > inputStartIndex && wIdx < words.length) {
+            const previousTarget = String(words[wIdx - 1] || '');
+            const nextTarget = String(words[wIdx] || '');
+            const expectsSeparator = hasCorrectPracticeSpacing(
+                previousTarget,
+                nextTarget,
+                ' ',
+                isPracticeOpeningPunctuation(previousTarget),
+                isPracticeClosingPunctuation(nextTarget) || nextTarget === '"'
+            );
+            const erroneousWhitespace = expectsSeparator
+                ? trailingWhitespace.slice(1)
+                : trailingWhitespace;
+            if (erroneousWhitespace) {
+                typedPerToken[wIdx] = erroneousWhitespace;
+                firstMismatch = wIdx;
+            }
+        }
+
         practiceState.mismatchIndex = firstMismatch;
-        practiceState.extraTypedWords = firstMismatch >= 0 ? typedArray.slice(tIdx) : [];
+        practiceState.extraTypedWords = firstMismatch >= 0 && spacingMismatchIndex !== firstMismatch
+            ? typedArray.slice(tIdx)
+            : [];
         practiceState.typedEndIndex = Math.max(-1, wIdx - 1);
+        if (spacingMismatchIndex === inputStartIndex && typedArray.length === 0) {
+            typedPerToken[inputStartIndex] = inputVal;
+            firstMismatch = inputStartIndex;
+            practiceState.mismatchIndex = firstMismatch;
+        }
 
         // If ignore punctuation is enabled, auto-skip remaining punctuation tokens when counting completed words
         if (firstMismatch < 0 && practiceState.ignorePunct) {
@@ -5041,43 +5499,86 @@ if ('serviceWorker' in navigator) {
         }
 
         practiceState.typedWords = typedPerToken;
-        if (firstMismatch >= 0) {
+        for (const index of practiceState.correctPracticeIndices) {
+            if (index >= inputStartIndex && !matchedIndices.has(index)) {
+                practiceState.correctPracticeIndices.delete(index);
+                practiceState.wordScores[index] = 0;
+            }
+        }
+        for (const index of matchedIndices) {
+            if (normalizeForComparison(typedPerToken[index]) === normalizeForComparison(words[index])) {
+                practiceState.correctPracticeIndices.add(index);
+            }
+        }
+        if (firstMismatch >= 0 && insertedSpace) {
             const missedWord = words[firstMismatch];
-            if (missedWord && !practiceState.eraseErrorWords.has(missedWord)) {
-                practiceState.eraseErrorWords.add(missedWord);
+            if (missedWord && !isPracticePunctuation(missedWord) && !practiceState.eraseErrorWords.has(missedWord)) {
+                trackPracticeErrorWord(missedWord);
                 registerProblemPracticeWord(missedWord);
             }
         }
-        practiceState.currentIndex = Math.max(0, firstMismatch >= 0 ? firstMismatch : wIdx);
+        let nextIndex = firstMismatch >= 0 ? firstMismatch : wIdx;
+        if (firstMismatch < 0 && insertedSpace && wIdx > inputStartIndex) {
+            nextIndex = wIdx;
+        } else if (firstMismatch < 0 && !hasIncompleteTarget
+            && !/\s$/u.test(inputVal) && wIdx > inputStartIndex && wIdx < words.length) {
+            let lastCompletedIndex = wIdx - 1;
+            if (practiceState.ignorePunct) {
+                while (lastCompletedIndex >= inputStartIndex && isPracticePunctuation(words[lastCompletedIndex])) {
+                    lastCompletedIndex--;
+                }
+            }
+            if (lastCompletedIndex >= inputStartIndex) nextIndex = lastCompletedIndex;
+        }
+        practiceState.currentIndex = Math.max(0, nextIndex);
         completeReachedPracticeQuotes();
 
-        if (firstMismatch < 0 && (completedItem || wIdx > mappingStartIndex)) {
-            input.value = '';
-            practiceState.lastInputValue = '';
-            practiceState.lastStrokeKind = '';
-            practiceState.lastStrokeTime = 0;
-            practiceState.extraTypedWords = [];
+        if (practiceState.isEndless && practiceState.testMode !== 'quotes') {
+            if (practiceState.currentIndex >= ENDLESS_PRUNE_THRESHOLD
+                && practiceState.mismatchIndex < 0
+                && practiceState.extraTypedWords.length === 0) {
+                pruneEndlessPracticeQueue(practiceState.currentIndex);
+            }
+            void ensureEndlessPracticeItems();
         }
 
-        // no endless mode: do not append copies
+        if (isDeletion) {
+            if (practiceVisualFrame) {
+                flushPracticeVisualUpdate();
+            } else {
+                updateMonkeyVisuals();
+            }
+        } else {
+            schedulePracticeVisualUpdate();
+        }
 
-        schedulePracticeVisualUpdate();
-        
-        if (practiceState.currentIndex >= practiceState.words.length && !isContinuousQuoteMode()) {
+        if (practiceState.currentIndex >= practiceState.words.length
+            && !isContinuousQuoteMode()
+            && !practiceState.isEndless) {
             endPractice();
         }
     }
 
     let practiceVisualFrame = 0;
+    let practiceVisualFallbackTimer = 0;
+
+    function flushPracticeVisualUpdate() {
+        if (!practiceVisualFrame) return;
+        cancelAnimationFrame(practiceVisualFrame);
+        practiceVisualFrame = 0;
+        if (practiceVisualFallbackTimer) {
+            clearTimeout(practiceVisualFallbackTimer);
+            practiceVisualFallbackTimer = 0;
+        }
+        updateMonkeyVisuals();
+        practiceState.lastLiveStatsPaint = performance.now();
+        calculateLiveStats();
+    }
 
     function schedulePracticeVisualUpdate() {
         if (practiceVisualFrame) return;
-        practiceVisualFrame = requestAnimationFrame(() => {
-            practiceVisualFrame = 0;
-            updateMonkeyVisuals();
-            practiceState.lastLiveStatsPaint = performance.now();
-            calculateLiveStats();
-        });
+        practiceVisualFrame = requestAnimationFrame(flushPracticeVisualUpdate);
+        practiceVisualFallbackTimer = setTimeout(flushPracticeVisualUpdate, 50);
     }
 
         function calculateLiveStats() {
@@ -5087,10 +5588,10 @@ if ('serviceWorker' in navigator) {
             const completedItems = Math.min(practiceState.currentIndex, practiceState.words.length);
             const wordUnitCount = index => practiceState.wordUnitCounts[index] ?? 1;
             practiceState.statsCorrectWords = Array.from(practiceState.correctPracticeIndices)
-                .reduce((total, index) => total + wordUnitCount(index), 0);
-        practiceState.statsCorrectChars = 0;
-        practiceState.statsTotalStrokes = 0;
-            let completedWordUnits = 0;
+                .reduce((total, index) => total + wordUnitCount(index), practiceState.endlessCorrectWordUnits);
+        practiceState.statsCorrectChars = practiceState.endlessCorrectCharacters;
+        practiceState.statsTotalStrokes = practiceState.endlessTotalStrokes;
+            let completedWordUnits = practiceState.endlessCompletedWordUnits;
             for (let i = 0; i < completedItems; i++) {
                 const wordUnits = wordUnitCount(i);
                 completedWordUnits += wordUnits;
@@ -5124,12 +5625,23 @@ if ('serviceWorker' in navigator) {
         if (liveStreak) liveStreak.innerText = practiceState.currentStreak;
         if (liveLongestStreak) liveLongestStreak.innerText = practiceState.longestStreak;
         
-        const completed = Math.min(practiceState.statsIndex, totalPracticeWords);
+        const completed = practiceState.isEndless
+            ? practiceState.statsIndex
+            : Math.min(practiceState.statsIndex, totalPracticeWords);
         const progressText = document.getElementById('liveProgressText');
         const progressBar = document.getElementById('liveProgressBar');
         let progressLabel = `${completed} / ${totalPracticeWords}`;
         let progressPercent = totalPracticeWords ? completed / totalPracticeWords * 100 : 0;
-        if (practiceState.testMode === 'time') {
+        if (practiceState.isEndless) {
+            if (practiceState.testMode === 'quotes') {
+                progressLabel = `${practiceState.completedQuotes} quotes completed · endless`;
+            } else if (practiceState.testMode === 'jeff-phrasing') {
+                progressLabel = `${practiceState.endlessCompletedItems + Math.min(practiceState.currentIndex, practiceState.words.length)} phrases completed · endless`;
+            } else {
+                progressLabel = `${practiceState.statsIndex} items completed · endless`;
+            }
+            if (progressBar) progressBar.style.display = 'none';
+        } else if (practiceState.testMode === 'time') {
             progressLabel = `${practiceState.completedQuotes} quotes`;
             progressPercent = practiceState.timeLimitSeconds
                 ? (practiceState.timeLimitSeconds - practiceState.timeRemaining) / practiceState.timeLimitSeconds * 100
@@ -5170,7 +5682,10 @@ if ('serviceWorker' in navigator) {
                 : 0;
         }
         if (progressText) progressText.innerText = progressLabel;
-        if (progressBar) progressBar.style.width = `${Math.max(0, Math.min(100, progressPercent))}%`;
+        if (progressBar) {
+            if (!practiceState.isEndless) progressBar.style.display = '';
+            progressBar.style.width = `${Math.max(0, Math.min(100, progressPercent))}%`;
+        }
         if (practiceState.testMode === 'daily') {
             updateDailyGoalProgress();
         }
@@ -5185,6 +5700,9 @@ if ('serviceWorker' in navigator) {
         stats.word = practiceState.words[Math.max(0, practiceState.currentIndex - 1)] || practiceState.words[practiceState.currentIndex] || '';
         stats.typedWords = practiceState.statsIndex;
         practiceState.statsHistory.push(stats);
+        if (practiceState.isEndless && practiceState.statsHistory.length > 3600) {
+            practiceState.statsHistory.splice(0, 300);
+        }
     }
 
     function escapeHtml(s) {
@@ -5231,7 +5749,7 @@ if ('serviceWorker' in navigator) {
             refreshPracticeAccuracy();
             const erasedWord = practiceState.words[practiceState.currentIndex];
             if (erasedWord) {
-                practiceState.eraseErrorWords.add(erasedWord);
+                trackPracticeErrorWord(erasedWord);
                 registerProblemPracticeWord(erasedWord);
                 recordPracticeMistake(practiceState.currentIndex);
             }
@@ -5255,7 +5773,7 @@ if ('serviceWorker' in navigator) {
                 lessonId: practiceState.lessonId,
                 words: completedWords,
                 phrases: practiceState.testMode === 'jeff-phrasing'
-                    ? Math.min(practiceState.currentIndex, practiceState.words.length)
+                    ? practiceState.endlessCompletedItems + Math.min(practiceState.currentIndex, practiceState.words.length)
                     : undefined,
                 wpm: finalStats.wpm,
                 acc: Number(finalStats.acc.toFixed(2)),
@@ -5623,7 +6141,6 @@ if ('serviceWorker' in navigator) {
         }
     });
 
-    let practiceRestartShortcutReady = false;
     window.addEventListener('keydown', event => {
         const practiceArena = document.getElementById('practiceArena');
         const practiceResults = document.getElementById('practiceResults');
@@ -5632,7 +6149,6 @@ if ('serviceWorker' in navigator) {
             const practiceSetup = document.getElementById('practiceSetup');
             if (practiceResults.style.display !== 'none' && event.key === 'Escape') {
                 event.preventDefault();
-                practiceRestartShortcutReady = false;
                 resetPracticeUI();
                 return;
             }
@@ -5640,13 +6156,9 @@ if ('serviceWorker' in navigator) {
                 && event.key === 'Enter'
                 && !event.altKey
                 && !event.ctrlKey
-                && !event.metaKey) {
+                && !event.metaKey
+                && !event.repeat) {
                 event.preventDefault();
-                practiceRestartShortcutReady = false;
-                if (practiceState.testMode === 'quote' || practiceState.testMode === 'daily') {
-                    document.getElementById('practiceTestMode').value = 'quote';
-                    updatePracticeTestControls();
-                }
                 startPractice();
                 return;
             }
@@ -5659,27 +6171,18 @@ if ('serviceWorker' in navigator) {
                 && !event.metaKey
                 && !event.repeat) {
                 event.preventDefault();
-                practiceRestartShortcutReady = false;
                 startPractice();
             }
             return;
         }
-        if (event.key === 'Enter' && practiceRestartShortcutReady) {
+        if (event.key === 'Enter'
+            && !event.altKey
+            && !event.ctrlKey
+            && !event.metaKey
+            && !event.repeat) {
             event.preventDefault();
-            practiceRestartShortcutReady = false;
             restartPractice();
-        } else if (event.key === 'Enter' && practiceState.awaitingNextQuote && !event.altKey && !event.ctrlKey && !event.metaKey) {
-            event.preventDefault();
-            practiceRestartShortcutReady = false;
-            advancePracticeQuote();
         } else if (event.key === 'Escape') {
-            practiceRestartShortcutReady = false;
             endPractice();
-        } else if (event.key === 'Tab') {
-            event.preventDefault();
-            practiceRestartShortcutReady = true;
-            document.getElementById('practiceInput').focus();
-        } else if (event.key !== 'Shift') {
-            practiceRestartShortcutReady = false;
         }
     });
