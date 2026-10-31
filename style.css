@@ -1261,22 +1261,26 @@
         #practiceMaterial { background: var(--surface); border: 0; border-radius: 3px; }
         .monkey-container {
             width: min(100%, 980px);
-            height: min(52vh, 360px);
-            min-height: 190px;
-            margin-top: 28px;
-            padding: 20px 8px;
+            height: clamp(150px, 28vh, 240px);
+            min-height: 150px;
+            margin-top: 16px;
+            padding: 10px 8px;
             border: 0;
             border-radius: 0;
             background: transparent;
             align-items: flex-start;
-            overflow-y: hidden;
+            overflow-y: auto;
             overscroll-behavior: none;
+            scrollbar-width: none;
+            overflow-anchor: none;
         }
+        .monkey-container::-webkit-scrollbar { display: none; }
+        #practiceArena { overflow-anchor: none; }
         .monkey-text {
             justify-content: center;
-            gap: 0.18em 0.36em;
+            gap: 0.08em 0.36em;
             font-size: clamp(1.35rem, 3.2vw, 2rem);
-            line-height: 1.8;
+            line-height: 1.4;
         }
         .monkey-word { border: 0; }
         .monkey-word.active { border: 0; }
@@ -1355,6 +1359,11 @@
             scrollbar-color: color-mix(in srgb, var(--text-muted) 45%, transparent) transparent;
             scrollbar-width: thin;
         }
+        #practiceArena .monkey-container {
+            scrollbar-color: transparent transparent;
+            scrollbar-width: none;
+        }
+        #practiceArena .monkey-container::-webkit-scrollbar { display: none; }
         #sidebar,
         .quote-history-list { overscroll-behavior: contain; }
         .site-header { position: relative; z-index: 1001; }
@@ -1446,8 +1455,8 @@
             .dashboard-stat-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
             .mode-records { grid-template-columns: 1fr; }
             #liveStatsBar { gap: 10px 16px; }
-            .monkey-container { height: 42vh; min-height: 180px; padding: 14px 0; }
-            .monkey-text { justify-content: flex-start; font-size: 1.25rem; }
+            .monkey-container { height: clamp(140px, 28vh, 210px); min-height: 140px; padding: 8px 0; }
+            .monkey-text { justify-content: flex-start; font-size: 1.25rem; line-height: 1.35; }
             .practice-progress-box { min-width: 120px; }
             #sidebar { width: 100vw; }
         }
