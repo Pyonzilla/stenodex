@@ -141,7 +141,7 @@
             width: 100vw;
             height: 100vh;
             background: var(--bg);
-            z-index: 1000;
+            z-index: 1100;
             transform: translateX(100%);
             transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
             display: flex;
@@ -160,6 +160,20 @@
             padding-bottom: 15px;
             border-bottom: 1px solid var(--border);
         }
+        .sidebar-close {
+            display: flex;
+            width: 38px;
+            height: 38px;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 1.2rem;
+        }
+        .sidebar-close:hover { background: var(--surface); color: var(--accent); }
         
         .sidebar-header h1 { font-size: 1.5rem; margin: 0; }
 
@@ -893,10 +907,12 @@
         .site-header {
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: flex-start;
+            gap: clamp(12px, 2vw, 24px);
+            position: relative;
             width: min(100% - 48px, 1120px);
             margin: 0 auto;
-            padding: 22px 0 0;
+            padding: 14px 0 0;
             color: var(--text-muted);
         }
         .site-header-actions {
@@ -904,6 +920,7 @@
             align-items: center;
             justify-content: flex-end;
             gap: clamp(8px, 2vw, 18px);
+            margin-left: auto;
             min-width: 0;
         }
         .site-brand {
@@ -926,7 +943,7 @@
         main {
             width: min(100%, 1120px);
             max-width: 1120px;
-            padding: 24px 24px 72px;
+            padding: 12px 24px 72px;
             gap: 28px;
         }
         .view-tabs {
@@ -950,6 +967,37 @@
             border: 0;
             background: transparent;
             color: var(--accent);
+        }
+        .site-header .view-tabs {
+            display: flex;
+            align-items: center;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            gap: clamp(8px, 1.6vw, 20px);
+            margin: 0;
+            padding: 0;
+            border: 0;
+            white-space: nowrap;
+        }
+        .site-header .view-tabs button {
+            position: relative;
+            flex: 0 0 auto;
+            padding: 8px 2px;
+            color: var(--text-muted);
+            font-size: clamp(0.7rem, 1.2vw, 0.85rem);
+            font-weight: 500;
+        }
+        .site-header .view-tabs button:hover,
+        .site-header .view-tabs button.active { color: var(--accent); }
+        .site-header .view-tabs [role="tab"][aria-selected="true"]::after {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            height: 2px;
+            background: var(--accent);
+            content: "";
         }
         .config-wrapper,
         .result-card,
@@ -1435,9 +1483,11 @@
         }
 
         @media (max-width: 680px) {
-            .site-header { width: calc(100% - 32px); padding-top: 18px; }
+            .site-header { width: calc(100% - 32px); gap: 10px; padding-top: 12px; }
+            .site-header .view-tabs { gap: clamp(8px, 2vw, 14px); }
+            .site-header .view-tabs button { font-size: 0.72rem; }
             .site-header-caption { display: none; }
-            main { padding: 20px 16px 48px; }
+            main { padding: 10px 16px 48px; }
             .dashboard-title { align-items: flex-start; flex-direction: column; gap: 8px; }
             .dashboard-last-practice { text-align: left; }
             .test-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1459,6 +1509,12 @@
             .monkey-text { justify-content: flex-start; font-size: 1.25rem; line-height: 1.35; }
             .practice-progress-box { min-width: 120px; }
             #sidebar { width: 100vw; }
+        }
+
+        @media (max-width: 460px) {
+            .site-header { gap: 8px; }
+            .site-header .view-tabs { gap: 8px; }
+            .site-header .view-tabs button { font-size: 0.68rem; }
         }
         @media (min-width: 681px) and (max-width: 980px) {
             .daily-insights-layout { grid-template-columns: minmax(0, 1fr); }

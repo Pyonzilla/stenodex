@@ -77,6 +77,7 @@
 <div id="sidebar" aria-hidden="true" inert>
     <div class="sidebar-header">
         <a class="site-brand" href="#" onclick="switchTab('practice'); return false;">steno<span>dex</span></a>
+        <button class="sidebar-close" type="button" onclick="toggleSidebar()" aria-label="Close profile options" title="Close profile options">&#10095;</button>
     </div>
 
     <div class="section-title">Profile Selection</div>
@@ -202,6 +203,10 @@
 
 <header class="site-header">
     <a class="site-brand" href="#" onclick="switchTab('practice'); return false;">steno<span>dex</span></a>
+    <nav class="view-tabs" id="viewTabs" role="tablist" aria-label="Main views">
+        <button id="searchTab" type="button" role="tab" aria-controls="searchView" aria-selected="true" tabindex="0" class="active" onclick="switchTab('search')">Search</button>
+        <button id="practiceTab" type="button" role="tab" aria-controls="practiceView" aria-selected="false" tabindex="-1" onclick="switchTab('practice')">Practice</button>
+    </nav>
     <div class="site-header-actions">
         <div class="site-header-caption">PROFILE OPTIONS</div>
         <button id="menuToggle" type="button" onclick="toggleSidebar()" aria-label="Open profile options" aria-controls="sidebar" aria-expanded="false">&#10094;</button>
@@ -209,11 +214,6 @@
 </header>
 
 <main>
-    <div class="view-tabs" id="viewTabs" role="tablist" aria-label="Main views">
-        <button id="searchTab" type="button" role="tab" aria-controls="searchView" aria-selected="true" tabindex="0" class="active" onclick="switchTab('search')">Dictionary Search</button>
-        <button id="practiceTab" type="button" role="tab" aria-controls="practiceView" aria-selected="false" tabindex="-1" onclick="switchTab('practice')">Practice Mode</button>
-    </div>
-
     <div id="searchView" role="tabpanel" aria-labelledby="searchTab">
         <div class="search-container">
             <div class="search-mode-wrapper">
