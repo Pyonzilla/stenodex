@@ -705,7 +705,7 @@
 
             <div id="liveTestStatus" class="live-test-status"></div>
             <div class="monkey-container" id="monkeyContainer">
-                <textarea id="practiceInput" aria-label="Type the displayed practice text" autocomplete="off" autocorrect="off" spellcheck="false" oninput="handleTyping(event)"></textarea>
+                <textarea id="practiceInput" aria-label="Type the displayed practice text" autocomplete="off" autocorrect="off" spellcheck="false" onbeforeinput="capturePracticeBeforeInput(event)" oninput="handleTyping(event)"></textarea>
                 <div id="monkeyText" class="monkey-text"></div>
             </div>
             <div id="strokeHint" class="stroke-hint"></div>

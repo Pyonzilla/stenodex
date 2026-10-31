@@ -5216,10 +5216,22 @@ if ('serviceWorker' in navigator) {
         }
     }
 
+    let pendingPracticeBeforeInput = null;
+
+    function capturePracticeBeforeInput(event) {
+        pendingPracticeBeforeInput = {
+            inputType: event.inputType || '',
+            data: typeof event.data === 'string' ? event.data : null,
+            selectionStart: event.target.selectionStart,
+            selectionEnd: event.target.selectionEnd
+        };
+    }
+
     function handleTyping(event, forceSnapshot = false) {
         if (practiceState.awaitingNextQuote) {
             const input = document.getElementById('practiceInput');
             if (input) input.value = '';
+            pendingPracticeBeforeInput = null;
             return;
         }
         const now = performance.now();
@@ -5229,11 +5241,19 @@ if ('serviceWorker' in navigator) {
         const previousInput = practiceState.lastInputValue;
         const inputType = event.inputType || '';
         const isInsertion = !inputType || inputType.startsWith('insert');
-        if (isInsertion && typeof event.data === 'string' && /^\s+$/u.test(event.data)
-            && rawInputVal === previousInput
-            && input.selectionStart === rawInputVal.length
-            && input.selectionEnd === rawInputVal.length) {
-            input.setRangeText(event.data, input.selectionStart, input.selectionEnd, 'end');
+        const beforeInput = pendingPracticeBeforeInput;
+        pendingPracticeBeforeInput = null;
+        const missingSpaceData = typeof event.data === 'string' && /^\s+$/u.test(event.data)
+            ? event.data
+            : beforeInput?.data && beforeInput.inputType.startsWith('insert')
+                && /^\s+$/u.test(beforeInput.data)
+                ? beforeInput.data
+                : null;
+        if (isInsertion && missingSpaceData
+            && rawInputVal === previousInput) {
+            const selectionStart = beforeInput?.selectionStart ?? input.selectionStart;
+            const selectionEnd = beforeInput?.selectionEnd ?? input.selectionEnd;
+            input.setRangeText(missingSpaceData, selectionStart, selectionEnd, 'end');
             rawInputVal = input.value;
         }
         let inputVal = rawInputVal.normalize('NFC');
