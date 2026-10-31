@@ -938,7 +938,10 @@ if ('serviceWorker' in navigator) {
     }
 
     function hasCorrectPracticeSpacing(previousTarget, target, gap, previousIsOpeningQuote, targetIsClosingQuote) {
-        const effectiveGap = practiceState.ignorePunct ? gap.replace(/\p{P}/gu, '') : gap;
+        const normalizedGap = gap.replace(/\s/gu, ' ');
+        const effectiveGap = practiceState.ignorePunct
+            ? normalizedGap.replace(/\p{P}/gu, '')
+            : normalizedGap;
         if (targetIsClosingQuote || isPracticeClosingPunctuation(target)
             || previousIsOpeningQuote || isPracticeOpeningPunctuation(previousTarget)) {
             return effectiveGap.length === 0;
@@ -5286,7 +5289,10 @@ if ('serviceWorker' in navigator) {
         let updatedActiveText = null;
         if (isInsertion && !forceSnapshot && inputVal.startsWith(previousInput)
             && previousInput.length > 0 && typeof event.data === 'string'
-            && event.data.length > 0 && activePartial) {
+            && event.data.length > 0
+            && inputVal.slice(previousInput.length) === event.data
+            && !/\s/u.test(event.data)
+            && activePartial) {
             updatedActiveText = activePartial + event.data;
         } else if (isDeletion && activePartial && previousInput.endsWith(activePartial)) {
             const activeInputStart = previousInput.length - activePartial.length;
