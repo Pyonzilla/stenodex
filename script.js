@@ -5507,7 +5507,7 @@ if ('serviceWorker' in navigator) {
         let nextIndex = firstMismatch >= 0 ? firstMismatch : wIdx;
         if (firstMismatch < 0 && insertedSpace && wIdx > inputStartIndex) {
             nextIndex = wIdx;
-        } else if (firstMismatch < 0 && !hasIncompleteTarget
+        } else if (!isDeletion && firstMismatch < 0 && !hasIncompleteTarget
             && !/\s$/u.test(inputVal) && wIdx > inputStartIndex && wIdx < words.length) {
             let lastCompletedIndex = wIdx - 1;
             if (practiceState.ignorePunct) {
