@@ -951,7 +951,6 @@ if ('serviceWorker' in navigator) {
 
     function findPracticeSpacingMismatch(input, words, startIndex = 0) {
         if (practiceState.testMode === 'symbols') return -1;
-        if (/^\s/u.test(input)) return startIndex;
         const typedTokens = [];
         for (const match of input.matchAll(/[\p{L}\p{M}\p{N}_'’-]+|[\p{P}\p{S}]/gu)) {
             if (practiceState.ignorePunct && practiceState.testMode !== 'symbols' && isPracticePunctuation(match[0])) continue;
@@ -4806,14 +4805,14 @@ if ('serviceWorker' in navigator) {
                 for(let i=0; i<word.length; i++) {
                     const span = document.createElement('span');
                     span.className = 'letter';
-                    span.innerText = ignoreCaps ? word[i].toLowerCase() : word[i];
+                    span.innerText = word[i];
                     if (blindMode && index >= activeIndex && i >= (practiceState.typedWords[index] || '').length) {
                         span.classList.add('blind-hidden');
                     }
                     wordDiv.appendChild(span);
                 }
             } else {
-                wordDiv.textContent = ignoreCaps ? word.toLowerCase() : word;
+                wordDiv.textContent = word;
             }
             container.appendChild(wordDiv);
         }
@@ -4969,7 +4968,7 @@ if ('serviceWorker' in navigator) {
                         ? typedChar.toLowerCase() === targetChar.toLowerCase()
                         : typedChar === targetChar;
                     span.className = 'letter' + (normalizedTyped === normalizedTarget || (typedChar && equal) ? ' correct' : '');
-                    span.innerText = ignoreCaps ? targetChar.toLowerCase() : targetChar;
+                    span.innerText = typedChar || targetChar;
                 });
             } else if (i === practiceState.currentIndex) {
                 wordDiv.classList.add('active');
@@ -4992,11 +4991,9 @@ if ('serviceWorker' in navigator) {
                             : typedChar === targetChar);
                         span.classList.toggle('correct', equal);
                         span.classList.toggle('incorrect', !equal);
-                        span.textContent = /\s/u.test(typedChar)
-                            ? (ignoreCaps ? targetChar.toLowerCase() : targetChar)
-                            : (ignoreCaps ? typedChar.toLowerCase() : typedChar);
+                        span.textContent = /\s/u.test(typedChar) ? targetChar : typedChar;
                     } else {
-                        span.textContent = ignoreCaps ? targetChar.toLowerCase() : targetChar;
+                        span.textContent = targetChar;
                     }
                     renderedLetters.push(span);
                 }
@@ -5005,7 +5002,7 @@ if ('serviceWorker' in navigator) {
                     const extra = document.createElement('span');
                     const typedChar = typed[typedIndex];
                     extra.className = `letter ${/\s/u.test(typedChar) ? 'incorrect' : 'extra'}`;
-                    extra.textContent = ignoreCaps ? typedChar.toLowerCase() : typedChar;
+                    extra.textContent = typedChar;
                     renderedLetters.push(extra);
                 }
                 wordDiv.replaceChildren(...renderedLetters);
@@ -5018,7 +5015,11 @@ if ('serviceWorker' in navigator) {
                     for (let j = 0; j < typed.length; j++) {
                         const span = document.createElement('span');
                         span.className = 'letter ' + (normalizeForComparison(typed) === normalizeForComparison(targetWord) ? 'correct' : 'incorrect');
-                        span.innerText = ignoreCapsAhead ? typed[j].toLowerCase() : typed[j];
+                        span.classList.toggle(
+                            'blind-hidden',
+                            practiceState.blindMode && i >= practiceState.currentIndex && j >= typed.length
+                        );
+                        span.innerText = typed[j];
                         wordDiv.appendChild(span);
                     }
                     continue;
@@ -5026,7 +5027,11 @@ if ('serviceWorker' in navigator) {
                 Array.from(wordDiv.children).forEach((span, idx) => { 
                     if(span.classList.contains('monkey-cursor')) return;
                     span.className = 'letter'; 
-                    if (targetWord[idx]) span.innerText = (ignoreCapsAhead ? targetWord[idx].toLowerCase() : targetWord[idx]);
+                    span.classList.toggle(
+                        'blind-hidden',
+                        practiceState.blindMode && i >= practiceState.currentIndex
+                    );
+                    if (targetWord[idx]) span.innerText = targetWord[idx];
                 });
                 Array.from(wordDiv.children).forEach(el => {
                     if(!el.classList.contains('monkey-cursor') && Array.prototype.indexOf.call(wordDiv.children, el) >= targetWord.length) {
@@ -5066,14 +5071,14 @@ if ('serviceWorker' in navigator) {
                     }
                     if (equal) {
                         span.className = 'letter correct';
-                        span.innerText = ignoreCaps ? targetChar.toLowerCase() : targetChar;
+                        span.innerText = typedChar;
                     } else {
                         span.className = 'letter incorrect';
-                        span.innerText = ignoreCaps ? typedChar.toLowerCase() : typedChar;
+                        span.innerText = typedChar;
                     }
                 } else {
                     span.className = 'letter';
-                    span.innerText = ignoreCaps ? targetWord[j].toLowerCase() : targetWord[j];
+                    span.innerText = targetWord[j];
                 }
             }
 
@@ -5091,7 +5096,7 @@ if ('serviceWorker' in navigator) {
                 for (let j = targetWord.length; j < typed.length; j++) {
                     const extraSpan = document.createElement('span');
                     extraSpan.className = 'letter extra';
-                    extraSpan.innerText = (ignoreCaps ? (typed[j] || '').toLowerCase() : (typed[j] || ''));
+                    extraSpan.innerText = typed[j] || '';
                     wordDiv.appendChild(extraSpan);
                 }
             }
@@ -5293,53 +5298,14 @@ if ('serviceWorker' in navigator) {
         practiceState.lastInputValue = inputVal;
 
         // Keep the entire textarea value so spaces and edits remain literal.
-        const typedArray = inputVal.match(/\S+/g) || [];
-        const typedTokenMatches = Array.from(inputVal.matchAll(/\S+/gu));
+        const parseInputVal = inputVal.replace(/^\s+/u, '');
+        const typedArray = parseInputVal.match(/\S+/g) || [];
+        const typedTokenMatches = Array.from(parseInputVal.matchAll(/\S+/gu));
         const insertedText = isInsertion && inputVal.startsWith(previousInput)
             ? inputVal.slice(previousInput.length)
             : (isInsertion && typeof event.data === 'string' ? event.data : inputVal);
         const isMultiWordInsertion = isInsertion && (insertedText.match(/\S+/g) || []).length > 1;
         const words = practiceState.words || [];
-        const currentTarget = words[practiceState.currentIndex];
-        const activePartial = practiceState.typedWords[practiceState.currentIndex] || '';
-        const insertedPunctuation = typeof event.data === 'string'
-            && tokenizePracticeText(event.data).some(isPracticePunctuation);
-        const activePunctuationCanContinue = isPracticeOpeningPunctuation(currentTarget)
-            || currentTarget === '"';
-        let updatedActiveText = null;
-        if (isInsertion && !forceSnapshot && inputVal.startsWith(previousInput)
-            && previousInput.length > 0 && typeof event.data === 'string'
-            && event.data.length > 0
-            && inputVal.slice(previousInput.length) === event.data
-            && !/\s/u.test(event.data)
-            && activePartial) {
-            updatedActiveText = activePartial + event.data;
-        } else if (isDeletion && activePartial && previousInput.endsWith(activePartial)) {
-            const activeInputStart = previousInput.length - activePartial.length;
-            if (inputVal.slice(0, activeInputStart) === previousInput.slice(0, activeInputStart)) {
-                updatedActiveText = inputVal.slice(activeInputStart);
-            }
-        }
-        if (updatedActiveText !== null && isInsertion && !forceSnapshot && currentTarget
-            && !String(currentTarget).includes(' ')
-            && !(isPracticePunctuation(currentTarget) && /^\s+$/u.test(event.data || ''))
-            && !(isInsertion && /^\s+$/u.test(event.data || '')
-                && normalizeForComparison(activePartial) === normalizeForComparison(currentTarget))
-            && !insertedPunctuation
-            && !activePunctuationCanContinue
-            && normalizeForComparison(updatedActiveText) !== normalizeForComparison(currentTarget)) {
-            const activeTypedText = updatedActiveText;
-            practiceState.typedWords[practiceState.currentIndex] = activeTypedText;
-            practiceState.typedEndIndex = practiceState.currentIndex;
-            const normalizedTarget = practiceState.normalizedWords[practiceState.currentIndex]
-                || normalizeForComparison(currentTarget);
-            practiceState.mismatchIndex = normalizedTarget.startsWith(normalizeForComparison(activeTypedText))
-                ? -1
-                : practiceState.currentIndex;
-            practiceState.extraTypedWords = [];
-            schedulePracticeVisualUpdate();
-            return;
-        }
 
         const inputStartIndex = Math.min(practiceState.inputStartIndex || 0, words.length);
         const spacingMismatchIndex = findPracticeSpacingMismatch(inputVal, words, inputStartIndex);
@@ -5363,8 +5329,8 @@ if ('serviceWorker' in navigator) {
                     ? previousTokenMatch.index + previousTokenMatch[0].length
                     : 0;
                 const unexpectedGap = tokenMatch
-                    ? inputVal.slice(gapStart, tokenMatch.index)
-                    : inputVal;
+                    ? parseInputVal.slice(gapStart, tokenMatch.index)
+                    : parseInputVal;
                 const previousTarget = String(words[wIdx - 1] || '');
                 const currentWord = String(words[wIdx] || '');
                 const expectsSeparator = previousTokenMatch
@@ -5434,7 +5400,7 @@ if ('serviceWorker' in navigator) {
             }
 
             if (normalizedTarget.startsWith(normalizeForComparison(seg))) {
-                typedPerToken[wIdx] = inputVal.slice(typedTokenMatches[tIdx].index);
+                typedPerToken[wIdx] = parseInputVal.slice(typedTokenMatches[tIdx].index);
                 if (tIdx + 1 < typedArray.length) {
             firstMismatch = wIdx;
             tIdx = typedArray.length;
@@ -5488,7 +5454,7 @@ if ('serviceWorker' in navigator) {
             break;
         }
 
-        const trailingWhitespace = inputVal.match(/\s+$/u)?.[0] || '';
+        const trailingWhitespace = parseInputVal.match(/\s+$/u)?.[0] || '';
         if (firstMismatch < 0 && trailingWhitespace && wIdx > inputStartIndex && wIdx < words.length) {
             const previousTarget = String(words[wIdx - 1] || '');
             const nextTarget = String(words[wIdx] || '');
@@ -5513,11 +5479,6 @@ if ('serviceWorker' in navigator) {
             ? typedArray.slice(tIdx)
             : [];
         practiceState.typedEndIndex = Math.max(-1, wIdx - 1);
-        if (spacingMismatchIndex === inputStartIndex && typedArray.length === 0) {
-            typedPerToken[inputStartIndex] = inputVal;
-            firstMismatch = inputStartIndex;
-            practiceState.mismatchIndex = firstMismatch;
-        }
 
         // If ignore punctuation is enabled, auto-skip remaining punctuation tokens when counting completed words
         if (firstMismatch < 0 && practiceState.ignorePunct) {
