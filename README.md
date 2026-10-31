@@ -1,4 +1,4 @@
-# StenoDex V7.3
+# StenoDex V7.4
 https://pyonzilla.github.io/stenodex/
 
 Web app for searching, visualizing and practicing Plover's custom stenography dictionaries.
@@ -9,7 +9,7 @@ Web app for searching, visualizing and practicing Plover's custom stenography di
 * Remap the visualizer to match your physical keyboard (includes support for extra left columns and extra thumb clusters).
 * Manage up to 5 independent dictionary profiles for multilingual stenographers or switching between theories.
 * 34 built-in color themes, plus a custom color picker.
-* Practice full sentenses using your dictionary as reference, plover clippy tape or material in typey type format, in order, random and pyramid paptterns.
+* Practice full sentenses using your dictionary as reference, plover clippy tape or material in typey type format, in order, random and pyramid patterns.
 * Keep track of your progress over time.
 * Keep track of your problematic words and a list of your briefs, that way you can isolate tricky words and finaly learn them.
 * Set repetitions, word ranges, maximum words, and include problematic words or your briefs into your practice material.
