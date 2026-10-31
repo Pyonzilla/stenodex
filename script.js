@@ -5182,26 +5182,23 @@ if ('serviceWorker' in navigator) {
     }
 
     function schedulePracticeSnapshotCheck() {
-        const strokeIndex = practiceState.pendingSnapshotTimer
-            ? practiceState.pendingSnapshotIndex
-            : practiceState.currentIndex;
-        if (practiceState.pendingSnapshotTimer) {
-            clearTimeout(practiceState.pendingSnapshotTimer);
+        if (practiceState.pendingSnapshotTimer) clearTimeout(practiceState.pendingSnapshotTimer);
+        practiceState.pendingSnapshotTimer = setTimeout(flushPracticeSnapshotCheck, 100);
+    }
+
+    function flushPracticeSnapshotCheck() {
+        if (!practiceState.pendingSnapshotTimer) return;
+        clearTimeout(practiceState.pendingSnapshotTimer);
+        const snapshotIndex = practiceState.pendingSnapshotIndex;
+        const inputType = practiceState.pendingSnapshotInputType;
+        practiceState.pendingSnapshotTimer = 0;
+        practiceState.pendingSnapshotIndex = -1;
+        practiceState.pendingSnapshotInputType = '';
+        if (inputType === 'deleteContentBackward') {
+            handleTyping({ inputType, data: null }, true);
         }
-        practiceState.pendingSnapshotIndex = strokeIndex;
-        practiceState.pendingSnapshotTimer = setTimeout(() => {
-            const snapshotIndex = practiceState.pendingSnapshotIndex;
-            const inputType = practiceState.pendingSnapshotInputType;
-            practiceState.pendingSnapshotTimer = 0;
-            practiceState.pendingSnapshotIndex = -1;
-            if (inputType === 'deleteContentBackward') {
-                handleTyping({ inputType, data: null }, true);
-            } else {
-                countPracticeStroke(snapshotIndex);
-                schedulePracticeVisualUpdate();
-            }
-            practiceState.pendingSnapshotInputType = '';
-        }, 100);
+        countPracticeStroke(snapshotIndex);
+        schedulePracticeVisualUpdate();
     }
 
     function countPracticeStroke(index = practiceState.currentIndex) {
@@ -5271,6 +5268,12 @@ if ('serviceWorker' in navigator) {
             input.setSelectionRange(normalizedStart, normalizedEnd);
         }
         const isDeletion = inputType.startsWith('delete');
+        const snapshotInputType = isDeletion ? 'deleteContentBackward' : 'insertText';
+        if (practiceState.pendingSnapshotTimer
+            && (practiceState.pendingSnapshotIndex !== practiceState.currentIndex
+                || practiceState.pendingSnapshotInputType !== snapshotInputType)) {
+            flushPracticeSnapshotCheck();
+        }
         const insertedSpace = isInsertion
             && (/\s$/u.test(inputVal) || /^\s+$/u.test(event.data || ''));
         const insertedOnlySpace = isInsertion && inputVal.startsWith(previousInput)
@@ -5278,7 +5281,8 @@ if ('serviceWorker' in navigator) {
 
         if (!forceSnapshot && inputVal !== previousInput
             && (isDeletion || (isInsertion && inputVal.trim() && !insertedOnlySpace))) {
-            practiceState.pendingSnapshotInputType = isDeletion ? 'deleteContentBackward' : 'insertText';
+            practiceState.pendingSnapshotInputType = snapshotInputType;
+            practiceState.pendingSnapshotIndex = practiceState.currentIndex;
             schedulePracticeSnapshotCheck();
         }
 
@@ -5298,7 +5302,7 @@ if ('serviceWorker' in navigator) {
         practiceState.lastInputValue = inputVal;
 
         // Keep the entire textarea value so spaces and edits remain literal.
-        const parseInputVal = inputVal.replace(/^\s+/u, '');
+        const parseInputVal = inputVal.replace(/^\s/u, '');
         const typedArray = parseInputVal.match(/\S+/g) || [];
         const typedTokenMatches = Array.from(parseInputVal.matchAll(/\S+/gu));
         const insertedText = isInsertion && inputVal.startsWith(previousInput)
@@ -5308,7 +5312,7 @@ if ('serviceWorker' in navigator) {
         const words = practiceState.words || [];
 
         const inputStartIndex = Math.min(practiceState.inputStartIndex || 0, words.length);
-        const spacingMismatchIndex = findPracticeSpacingMismatch(inputVal, words, inputStartIndex);
+        const spacingMismatchIndex = findPracticeSpacingMismatch(parseInputVal, words, inputStartIndex);
         const typedPerToken = practiceState.typedWords.slice(0, words.length);
         while (typedPerToken.length < words.length) typedPerToken.push('');
         typedPerToken.fill('', inputStartIndex);
@@ -5317,7 +5321,11 @@ if ('serviceWorker' in navigator) {
         let firstMismatch = -1;
         let hasIncompleteTarget = false;
         const matchedIndices = new Set();
-        while (tIdx < typedArray.length && wIdx < words.length) {
+        if (/^\s/u.test(parseInputVal) && typedArray.length > 0) {
+            typedPerToken[inputStartIndex] = parseInputVal;
+            firstMismatch = inputStartIndex;
+        }
+        while (firstMismatch < 0 && tIdx < typedArray.length && wIdx < words.length) {
             if (practiceState.ignorePunct && practiceState.testMode !== 'symbols' && isPracticePunctuation(words[wIdx])) {
                 wIdx++;
                 continue;
@@ -5455,7 +5463,8 @@ if ('serviceWorker' in navigator) {
         }
 
         const trailingWhitespace = parseInputVal.match(/\s+$/u)?.[0] || '';
-        if (firstMismatch < 0 && trailingWhitespace && wIdx > inputStartIndex && wIdx < words.length) {
+        if (firstMismatch < 0 && !hasIncompleteTarget && trailingWhitespace
+            && wIdx > inputStartIndex && wIdx < words.length) {
             const previousTarget = String(words[wIdx - 1] || '');
             const nextTarget = String(words[wIdx] || '');
             const expectsSeparator = hasCorrectPracticeSpacing(
@@ -5713,13 +5722,7 @@ if ('serviceWorker' in navigator) {
         if (practiceState.sessionEnding) return;
         practiceState.sessionEnding = true;
         if (practiceState.pendingSnapshotTimer) {
-            clearTimeout(practiceState.pendingSnapshotTimer);
-            if (practiceState.pendingSnapshotInputType !== 'deleteContentBackward') {
-                countPracticeStroke(practiceState.pendingSnapshotIndex);
-            }
-            practiceState.pendingSnapshotTimer = 0;
-            practiceState.pendingSnapshotIndex = -1;
-            practiceState.pendingSnapshotInputType = '';
+            flushPracticeSnapshotCheck();
         }
         clearInterval(statsInterval);
         clearInterval(practiceState.timerInterval);
