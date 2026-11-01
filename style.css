@@ -756,14 +756,6 @@
             flex: 0 0 100%;
             pointer-events: none;
         }
-        .practice-quote-trailing-space {
-            flex: 0 0 0.38em;
-            width: 0.38em;
-            margin-left: -0.38em;
-            color: var(--practice-untyped);
-            white-space: pre;
-            pointer-events: none;
-        }
         .monkey-word {
             display: inline-flex;
             flex: 0 0 auto;

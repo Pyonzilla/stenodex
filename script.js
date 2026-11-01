@@ -4981,21 +4981,6 @@ if ('serviceWorker' in navigator) {
                 wordDiv.textContent = word;
             }
             container.appendChild(wordDiv);
-
-            if (practiceState.testMode === 'quotes') {
-                const quoteRange = practiceState.quoteRanges.find(range => range.end === index + 1);
-                const hasFollowingQuote = quoteRange && (
-                    practiceState.isEndless
-                    || practiceState.quoteRanges.some(range => range.start >= quoteRange.end)
-                );
-                if (hasFollowingQuote) {
-                    const trailingSpace = document.createElement('span');
-                    trailingSpace.className = 'practice-quote-trailing-space';
-                    trailingSpace.setAttribute('aria-hidden', 'true');
-                    trailingSpace.textContent = ' ';
-                    container.appendChild(trailingSpace);
-                }
-            }
         }
 
         const nextAnchor = anchorIndex >= 0
