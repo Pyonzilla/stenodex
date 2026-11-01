@@ -5966,7 +5966,8 @@ if ('serviceWorker' in navigator) {
             }
         }
         let nextIndex = firstMismatch >= 0 ? firstMismatch : wIdx;
-        if (firstMismatch < 0 && insertedSpace && wIdx > inputStartIndex) {
+        if (firstMismatch < 0 && wIdx > inputStartIndex
+            && (insertedSpace || (activeQuoteRange && wIdx >= inputEndIndex))) {
             nextIndex = wIdx;
         } else if (!isDeletion && firstMismatch < 0 && !hasIncompleteTarget
             && !/\s$/u.test(inputVal) && wIdx > inputStartIndex && wIdx < words.length) {
