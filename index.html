@@ -264,7 +264,7 @@
                         </select>
                     </label>
                     <div class="practice-mode-controls" aria-label="Practice order and stroke settings">
-                        <label class="test-setting">
+                        <label class="test-setting practice-order-setting">
                             <span>Word order</span>
                             <select id="practiceMode" class="profile-select">
                                 <option value="random">Random</option>
@@ -592,41 +592,49 @@
                             <div class="daily-mode-goal">
                                 <span>Quotes <strong id="dailyGoalQuoteSummary"><span id="dailyGoalComplete">0</span> / <span id="dailyGoalTotal">5</span></strong><strong id="dailyGoalQuoteSkipped" hidden>Skipped · complete</strong></span>
                                 <input id="dailyGoalInput" type="number" min="0" max="100" value="5" aria-label="Daily quote goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('quotes', 'dailyGoalInput')" aria-label="Practice quote goal" title="Practice quote goal">▶</button>
                                 <div id="dailyGoalQuoteTrack" class="daily-goal-track" role="progressbar" aria-label="Daily quote goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalBar" class="daily-goal-bar"></div></div>
                             </div>
                             <div class="daily-mode-goal">
                                 <span>Words <strong id="dailyGoalWordsSummary"><span id="dailyGoalWordsComplete">0</span> / <span id="dailyGoalWordsTotal">100</span></strong><strong id="dailyGoalWordsSkipped" hidden>Skipped · complete</strong></span>
                                 <input id="dailyGoalWordsInput" type="number" min="0" max="50000" step="10" value="100" aria-label="Daily word goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('words', 'dailyGoalWordsInput')" aria-label="Practice word goal" title="Practice word goal">▶</button>
                                 <div id="dailyGoalWordsTrack" class="daily-goal-track" role="progressbar" aria-label="Daily word goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalWordsBar" class="daily-goal-bar"></div></div>
                             </div>
                             <div class="daily-mode-goal">
                                 <span>Problematic words <strong id="dailyGoalProblematicProgress">0 / 10</strong></span>
                                 <input id="dailyGoalProblematicInput" type="number" min="0" max="50000" value="10" aria-label="Daily problematic words goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('problematic', 'dailyGoalProblematicInput')" aria-label="Practice problematic words goal" title="Practice problematic words goal">▶</button>
                                 <div id="dailyGoalProblematicTrack" class="daily-goal-track" role="progressbar" aria-label="Daily problematic words goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalProblematicBar" class="daily-goal-bar"></div></div>
                             </div>
                             <div class="daily-mode-goal">
                                 <span>My briefs <strong id="dailyGoalBriefsProgress">0 / 10</strong></span>
                                 <input id="dailyGoalBriefsInput" type="number" min="0" max="50000" value="10" aria-label="Daily briefs goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('briefs', 'dailyGoalBriefsInput')" aria-label="Practice briefs goal" title="Practice briefs goal">▶</button>
                                 <div id="dailyGoalBriefsTrack" class="daily-goal-track" role="progressbar" aria-label="Daily briefs goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalBriefsBar" class="daily-goal-bar"></div></div>
                             </div>
                             <div class="daily-mode-goal">
                                 <span>Accuracy &gt;95% <strong id="dailyGoalAccuracyProgress">0 / 5</strong></span>
                                 <input id="dailyGoalAccuracyInput" type="number" min="0" max="50000" value="5" aria-label="Daily above 95 percent accuracy goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('quote', 'dailyGoalAccuracyInput')" aria-label="Practice for the accuracy goal" title="Practice for the accuracy goal">▶</button>
                                 <div id="dailyGoalAccuracyTrack" class="daily-goal-track" role="progressbar" aria-label="Daily above 95 percent accuracy goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalAccuracyBar" class="daily-goal-bar"></div></div>
                             </div>
                             <div class="daily-mode-goal">
                                 <span>Numbers <strong id="dailyGoalNumbersProgress">0 / 10</strong></span>
                                 <input id="dailyGoalNumbersInput" type="number" min="0" max="50000" value="10" aria-label="Daily numbers goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('numbers', 'dailyGoalNumbersInput')" aria-label="Practice numbers goal" title="Practice numbers goal">▶</button>
                                 <div id="dailyGoalNumbersTrack" class="daily-goal-track" role="progressbar" aria-label="Daily numbers goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalNumbersBar" class="daily-goal-bar"></div></div>
                             </div>
                             <div class="daily-mode-goal">
                                 <span>Symbols <strong id="dailyGoalSymbolsProgress">0 / 25</strong></span>
                                 <input id="dailyGoalSymbolsInput" type="number" min="0" max="50000" value="25" aria-label="Daily symbols goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('symbols', 'dailyGoalSymbolsInput')" aria-label="Practice symbols goal" title="Practice symbols goal">▶</button>
                                 <div id="dailyGoalSymbolsTrack" class="daily-goal-track" role="progressbar" aria-label="Daily symbols goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalSymbolsBar" class="daily-goal-bar"></div></div>
                             </div>
                             <div class="daily-mode-goal">
                                 <span>Jeff phrases <strong id="dailyGoalJeffPhrasesProgress">0 / 10</strong></span>
                                 <input id="dailyGoalJeffPhrasesInput" type="number" min="0" max="50000" value="10" aria-label="Daily Jeff Phrasing goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('jeff-phrasing', 'dailyGoalJeffPhrasesInput')" aria-label="Practice Jeff Phrasing goal" title="Practice Jeff Phrasing goal">▶</button>
                                 <div id="dailyGoalJeffPhrasesTrack" class="daily-goal-track" role="progressbar" aria-label="Daily Jeff Phrasing goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalJeffPhrasesBar" class="daily-goal-bar"></div></div>
                             </div>
                         </div>
@@ -708,9 +716,9 @@
                 <textarea id="practiceInput" aria-label="Type the displayed practice text" autocomplete="off" autocorrect="off" spellcheck="false" onbeforeinput="capturePracticeBeforeInput(event)" oninput="handleTyping(event)"></textarea>
                 <div id="monkeyText" class="monkey-text"></div>
             </div>
-            <div id="strokeHint" class="stroke-hint"></div>
             <button id="redoPracticeButton" class="redo-practice-button" type="button" onclick="restartPractice()" aria-label="Restart test" title="Restart test">↻</button>
             <div class="practice-keyboard-hint"><kbd>Enter</kbd> to restart with new material · <kbd>Esc</kbd> to end</div>
+            <div id="strokeHint" class="stroke-hint"></div>
 
         </div>
 

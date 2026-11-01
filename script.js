@@ -1593,11 +1593,17 @@ if ('serviceWorker' in navigator) {
         currentIndex: 0,
         inputStartIndex: 0,
         lastScrolledIndex: -1,
+        lastScrollCheckIndex: -1,
         lastScrolledLineTop: -1,
         lockedScrollTop: 0,
-        scrollTriggerIndices: new Set(),
-        scrollTriggerTops: {},
+        averageWordInterval: 500,
         extraTypedWords: [],
+        overflowVisualWords: null,
+        overflowVisualSeparators: [],
+        overflowIncorrectFromIndex: -1,
+        overflowCursorIndex: -1,
+        overflowCursorOffset: 0,
+        overflowCursorSeparatorAfterIndex: -1,
         mismatchIndex: -1,
         typedEndIndex: -1,
         incorrectWordIndices: new Set(),
@@ -1671,6 +1677,7 @@ if ('serviceWorker' in navigator) {
         lastVisualIndex: -1,
         renderedStart: 0,
         renderedEnd: -1,
+        renderedTopSpacerHeight: 0,
         logicalInput: '',
         replacementBurstTimer: 0,
         replacementIndex: -1,
@@ -2440,7 +2447,11 @@ if ('serviceWorker' in navigator) {
     function switchTab(tab) {
         const isSearch = tab === 'search';
         document.getElementById('searchView').style.display = isSearch ? 'block' : 'none';
-        document.getElementById('practiceView').style.display = isSearch ? 'none' : 'block';
+        document.getElementById('practiceView').style.display = isSearch ? 'none' : 'flex';
+        document.querySelector('main').classList.toggle(
+            'practice-session-active',
+            !isSearch && document.getElementById('practiceArena').style.display === 'flex'
+        );
         const searchTab = document.getElementById('searchTab');
         const practiceTab = document.getElementById('practiceTab');
         searchTab.classList.toggle('active', isSearch);
@@ -3050,6 +3061,10 @@ if ('serviceWorker' in navigator) {
     function pruneEndlessPracticeQueue(itemCount) {
         const count = Math.min(Math.max(0, itemCount), practiceState.currentIndex);
         if (!practiceState.isEndless || !count) return;
+        if (practiceScrollFrame) cancelAnimationFrame(practiceScrollFrame);
+        practiceScrollFrame = 0;
+        const textContainer = document.getElementById('monkeyText');
+        const retainedLineHeight = parseFloat(getComputedStyle(textContainer).lineHeight) || 43;
 
         const attemptedIndices = new Set([
             ...practiceState.correctPracticeIndices,
@@ -3094,6 +3109,12 @@ if ('serviceWorker' in navigator) {
         practiceState.lastCompletedIndex = practiceState.currentIndex - 1;
         practiceState.mismatchIndex = -1;
         practiceState.extraTypedWords = [];
+        practiceState.overflowVisualWords = null;
+        practiceState.overflowVisualSeparators = [];
+        practiceState.overflowIncorrectFromIndex = -1;
+        practiceState.overflowCursorIndex = -1;
+        practiceState.overflowCursorOffset = 0;
+        practiceState.overflowCursorSeparatorAfterIndex = -1;
         practiceState.logicalInput = activePartial;
         practiceState.lastInputValue = activePartial;
         const input = document.getElementById('practiceInput');
@@ -3112,7 +3133,9 @@ if ('serviceWorker' in navigator) {
         practiceState.inefficient = new Set(Array.from(practiceState.inefficient).filter(word => retainedWords.has(word)));
         practiceState.renderedStart = 0;
         practiceState.renderedEnd = -1;
+        practiceState.renderedTopSpacerHeight = retainedLineHeight;
         practiceState.lastScrolledIndex = -1;
+        practiceState.lastScrollCheckIndex = -1;
         practiceState.lastScrolledLineTop = -1;
         practiceState.lockedScrollTop = 0;
         practiceState.spokenPracticeIndex = -1;
@@ -4133,8 +4156,8 @@ if ('serviceWorker' in navigator) {
         document.querySelectorAll('.jeff-phrasing-setting').forEach(setting => {
             setting.hidden = mode !== 'jeff-phrasing';
         });
-        const practiceModeControls = document.querySelector('.practice-mode-controls');
-        if (practiceModeControls) practiceModeControls.hidden = mode === 'jeff-phrasing';
+        const practiceOrderSetting = document.querySelector('.practice-order-setting');
+        if (practiceOrderSetting) practiceOrderSetting.hidden = mode === 'jeff-phrasing';
         document.querySelectorAll('.test-number-setting').forEach(setting => {
             setting.hidden = mode !== 'numbers';
         });
@@ -4225,6 +4248,28 @@ if ('serviceWorker' in navigator) {
         startPractice(nextPractice.target);
     }
 
+    function startPracticeGoal(mode, inputId) {
+        const goalInputs = {
+            quotes: 'dailyGoalInput',
+            words: 'dailyGoalWordsInput',
+            problematic: 'dailyGoalProblematicInput',
+            briefs: 'dailyGoalBriefsInput',
+            quote: 'dailyGoalAccuracyInput',
+            numbers: 'dailyGoalNumbersInput',
+            symbols: 'dailyGoalSymbolsInput',
+            'jeff-phrasing': 'dailyGoalJeffPhrasesInput'
+        };
+        if (goalInputs[mode] !== inputId) return;
+
+        const goalInput = document.getElementById(inputId);
+        const goal = Math.max(0, Math.min(50000, Number(goalInput?.value) || 0));
+        if (!goal) return;
+
+        document.getElementById('practiceTestMode').value = mode;
+        updatePracticeTestControls();
+        return startPractice(mode === 'quote' ? 1 : goal);
+    }
+
     function restartPractice() {
         startPractice();
     }
@@ -4268,13 +4313,17 @@ if ('serviceWorker' in navigator) {
             mode = document.getElementById('practiceMode').value;
         } else if (testMode !== 'lesson') {
             try {
-                quoteTest = await buildQuoteTestQueue(
-                    testMode,
-                    endlessMode && testMode === 'quotes'
+                const quoteCountOverride = dailyGoalTarget > 0
+                    && (testMode === 'quotes' || testMode === 'words')
+                    ? dailyGoalTarget
+                    : endlessMode && testMode === 'quotes'
                         ? ENDLESS_INITIAL_QUOTES
                         : endlessMode && testMode === 'words'
                             ? ENDLESS_CHUNK_SIZE
-                            : null
+                            : null;
+                quoteTest = await buildQuoteTestQueue(
+                    testMode,
+                    quoteCountOverride
                 );
             } catch (error) {
                 openModal('Unable to start practice', error.message, () => {});
@@ -4399,6 +4448,9 @@ if ('serviceWorker' in navigator) {
         practiceState.currentIndex = 0;
         practiceState.inputStartIndex = 0;
         practiceState.lastScrolledIndex = -1;
+        practiceState.lastScrollCheckIndex = -1;
+        practiceState.lastInputTime = 0;
+        practiceState.averageWordInterval = 500;
         practiceState.statsIndex = 0;
         practiceState.statsCorrectChars = 0;
         practiceState.statsCorrectWords = 0;
@@ -4426,6 +4478,12 @@ if ('serviceWorker' in navigator) {
         practiceState.sessionStartTime = 0;
         practiceState.sessionStartDate = new Date();
         practiceState.lastInputValue = '';
+        practiceState.overflowVisualWords = null;
+        practiceState.overflowVisualSeparators = [];
+        practiceState.overflowIncorrectFromIndex = -1;
+        practiceState.overflowCursorIndex = -1;
+        practiceState.overflowCursorOffset = 0;
+        practiceState.overflowCursorSeparatorAfterIndex = -1;
         practiceState.lastStrokeTime = 0;
         practiceState.lastStrokeKind = '';
         if (practiceState.pendingSnapshotTimer) clearTimeout(practiceState.pendingSnapshotTimer);
@@ -4464,6 +4522,8 @@ if ('serviceWorker' in navigator) {
         practiceState.lastVisualIndex = -1;
         practiceState.renderedStart = 0;
         practiceState.renderedEnd = -1;
+        practiceState.renderedTopSpacerHeight = 0;
+        practiceState.lastScrollCheckIndex = -1;
         practiceState.logicalInput = '';
         if (practiceState.replacementBurstTimer) clearTimeout(practiceState.replacementBurstTimer);
         practiceState.replacementBurstTimer = 0;
@@ -4484,6 +4544,7 @@ if ('serviceWorker' in navigator) {
         document.getElementById('practiceSetup').style.display = 'none';
         document.getElementById('practiceResults').style.display = 'none';
         document.getElementById('practiceArena').style.display = 'flex';
+        document.querySelector('main').classList.add('practice-session-active');
         calculateLiveStats();
 
         if (practiceScrollFrame) cancelAnimationFrame(practiceScrollFrame);
@@ -4491,6 +4552,12 @@ if ('serviceWorker' in navigator) {
         practiceState.lastScrolledLineTop = -1;
         practiceState.lockedScrollTop = 0;
         practiceState.extraTypedWords = [];
+        practiceState.overflowVisualWords = null;
+        practiceState.overflowVisualSeparators = [];
+        practiceState.overflowIncorrectFromIndex = -1;
+        practiceState.overflowCursorIndex = -1;
+        practiceState.overflowCursorOffset = 0;
+        practiceState.overflowCursorSeparatorAfterIndex = -1;
         practiceState.mismatchIndex = -1;
         practiceState.typedEndIndex = -1;
         practiceState.incorrectWordIndices = new Set();
@@ -4680,15 +4747,18 @@ if ('serviceWorker' in navigator) {
         practiceState.lastCompletedIndex = nextRange.start - 1;
         practiceState.logicalInput = '';
         practiceState.lastInputValue = '';
+        practiceState.lastInputTime = 0;
+        practiceState.averageWordInterval = 500;
         practiceState.lastStrokeKind = '';
         practiceState.lastStrokeTime = 0;
         practiceState.mismatchIndex = -1;
         practiceState.extraTypedWords = [];
-        practiceState.renderedStart = 0;
-        practiceState.renderedEnd = -1;
-        practiceState.lastScrolledIndex = -1;
-        practiceState.lastScrolledLineTop = -1;
-        practiceState.lockedScrollTop = 0;
+        practiceState.overflowVisualWords = null;
+        practiceState.overflowVisualSeparators = [];
+        practiceState.overflowIncorrectFromIndex = -1;
+        practiceState.overflowCursorIndex = -1;
+        practiceState.overflowCursorOffset = 0;
+        practiceState.overflowCursorSeparatorAfterIndex = -1;
         document.getElementById('practiceInput').value = '';
         if (practiceState.isEndless && practiceState.testMode === 'quotes' && nextRange.start > 0) {
             pruneEndlessPracticeQueue(nextRange.start);
@@ -4696,7 +4766,6 @@ if ('serviceWorker' in navigator) {
         if (practiceState.isEndless && practiceState.testMode === 'quotes') {
             void ensureEndlessPracticeQuotesLoaded();
         }
-        document.getElementById('monkeyContainer').scrollTop = 0;
         renderMonkeyText();
         document.getElementById('practiceInput').focus();
         const status = document.getElementById('liveTestStatus');
@@ -4747,19 +4816,44 @@ if ('serviceWorker' in navigator) {
 
     function renderMonkeyText() {
         const container = document.getElementById('monkeyText');
+        const scrollContainer = document.getElementById('monkeyContainer');
+        const previousScrollTop = scrollContainer.scrollTop;
+        const previousStart = practiceState.renderedStart;
+        const previousEnd = practiceState.renderedEnd;
+        const hadRenderedWindow = practiceState.renderedEnd >= practiceState.renderedStart
+            && container.children.length > 0;
+        const anchorIndex = hadRenderedWindow
+            ? Math.max(previousStart, Math.min(practiceState.currentIndex, previousEnd))
+            : -1;
+        const previousAnchor = anchorIndex >= 0
+            ? document.getElementById(`word-${anchorIndex}`)
+            : null;
+        const previousAnchorTop = previousAnchor
+            ? previousAnchor.getBoundingClientRect().top
+                - scrollContainer.getBoundingClientRect().top
+                - scrollContainer.clientTop
+            : 0;
+        const previousAnchorContentTop = previousAnchorTop + previousScrollTop;
         container.innerHTML = "";
         const ignoreCaps = practiceState.ignoreCaps;
         const ignorePunct = practiceState.ignorePunct;
         const blindMode = practiceState.blindMode;
         const activeIndex = practiceState.currentIndex;
         announceActivePracticeItem();
-        const windowSize = 100;
-        const startIndex = Math.max(0, activeIndex - 15);
+        const windowSize = 160;
+        const startIndex = Math.max(0, activeIndex - 60);
         const endIndex = Math.min(practiceState.words.length - 1, activeIndex + windowSize - 1);
+        const resetVirtualPrefix = startIndex === 0 && previousStart > 0;
+        if (resetVirtualPrefix) practiceState.renderedTopSpacerHeight = 0;
         practiceState.renderedStart = startIndex;
         practiceState.renderedEnd = endIndex;
-        document.getElementById('monkeyContainer').scrollTop = 0;
-        practiceState.lockedScrollTop = 0;
+
+        const topSpacer = document.createElement('div');
+        topSpacer.className = 'practice-text-spacer';
+        topSpacer.setAttribute('aria-hidden', 'true');
+        topSpacer.style.height = `${practiceState.renderedTopSpacerHeight}px`;
+        topSpacer.hidden = practiceState.renderedTopSpacerHeight <= 0;
+        container.appendChild(topSpacer);
 
         let straightQuoteOpen = false;
         for (let index = 0; index < startIndex; index++) {
@@ -4815,23 +4909,64 @@ if ('serviceWorker' in navigator) {
                 wordDiv.textContent = word;
             }
             container.appendChild(wordDiv);
+
+            if (practiceState.testMode === 'quotes') {
+                const quoteRange = practiceState.quoteRanges.find(range => range.end === index + 1);
+                const hasFollowingQuote = quoteRange && (
+                    practiceState.isEndless
+                    || practiceState.quoteRanges.some(range => range.start >= quoteRange.end)
+                );
+                if (hasFollowingQuote) {
+                    const trailingSpace = document.createElement('span');
+                    trailingSpace.className = 'practice-quote-trailing-space';
+                    trailingSpace.setAttribute('aria-hidden', 'true');
+                    trailingSpace.textContent = ' ';
+                    container.appendChild(trailingSpace);
+                }
+            }
         }
 
-        practiceState.scrollTriggerIndices = new Set();
-        practiceState.scrollTriggerTops = {};
-        let previousLineTop = null;
-        const lineHeight = parseFloat(getComputedStyle(container).lineHeight) || 43;
-        container.querySelectorAll('.monkey-word').forEach((wordDiv) => {
-            if (wordDiv.classList.contains('hidden-punct')) return;
-            const lineTop = wordDiv.offsetTop;
-            if (previousLineTop === null || Math.abs(lineTop - previousLineTop) >= lineHeight * 0.5) {
-                const index = Number(wordDiv.id.slice(5));
-                practiceState.scrollTriggerIndices.add(index);
-                practiceState.scrollTriggerTops[index] = lineTop;
-                previousLineTop = lineTop;
+        const nextAnchor = anchorIndex >= 0
+            ? document.getElementById(`word-${anchorIndex}`)
+            : null;
+        if (previousAnchor && nextAnchor && !resetVirtualPrefix) {
+            scrollContainer.scrollTop = 0;
+            let spacerHeight = practiceState.renderedTopSpacerHeight;
+            for (let attempt = 0; attempt < 3; attempt++) {
+                topSpacer.style.height = `${spacerHeight}px`;
+                topSpacer.hidden = spacerHeight <= 0;
+                const nextAnchorContentTop = nextAnchor.getBoundingClientRect().top
+                    - scrollContainer.getBoundingClientRect().top
+                    - scrollContainer.clientTop;
+                const adjustedHeight = Math.max(
+                    0,
+                    spacerHeight + previousAnchorContentTop - nextAnchorContentTop
+                );
+                if (Math.abs(adjustedHeight - spacerHeight) < 0.5) {
+                    spacerHeight = adjustedHeight;
+                    break;
+                }
+                spacerHeight = adjustedHeight;
             }
-        });
-        
+            practiceState.renderedTopSpacerHeight = spacerHeight;
+            topSpacer.style.height = `${spacerHeight}px`;
+            topSpacer.hidden = spacerHeight <= 0;
+        }
+        const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+        scrollContainer.scrollTop = hadRenderedWindow && !resetVirtualPrefix
+            ? Math.min(previousScrollTop, maxScrollTop)
+            : 0;
+        if (previousAnchor && nextAnchor && !resetVirtualPrefix) {
+            const nextAnchorTop = nextAnchor.getBoundingClientRect().top
+                - scrollContainer.getBoundingClientRect().top
+                - scrollContainer.clientTop;
+            scrollContainer.scrollTop = Math.max(0, Math.min(
+                maxScrollTop,
+                scrollContainer.scrollTop + nextAnchorTop - previousAnchorTop
+            ));
+        }
+        practiceState.lockedScrollTop = scrollContainer.scrollTop;
+
         // If punctuation is being ignored, skip any punctuation tokens so they don't act as "phantom" words
         try { skipHiddenPunctuationTokens(); } catch(e) {}
         updateMonkeyVisuals();
@@ -4839,15 +4974,15 @@ if ('serviceWorker' in navigator) {
 
     let practiceScrollFrame = 0;
 
-    function animatePracticeScroll(container, targetTop) {
+    function animatePracticeScroll(container, targetTop, duration) {
         if (practiceScrollFrame) cancelAnimationFrame(practiceScrollFrame);
+        practiceScrollFrame = 0;
 
         const startTop = container.scrollTop;
         const distance = targetTop - startTop;
         if (Math.abs(distance) < 1) return;
 
         const startTime = performance.now();
-        const duration = Math.min(220, Math.max(120, Math.abs(distance) * 1.5));
 
         function step(now) {
             const progress = Math.min(1, (now - startTime) / duration);
@@ -4864,34 +4999,44 @@ if ('serviceWorker' in navigator) {
         const container = document.getElementById('monkeyContainer');
         if (!container) return;
 
-        const movingBackward = practiceState.currentIndex < practiceState.lastScrolledIndex;
-        if (!practiceState.scrollTriggerIndices.has(practiceState.currentIndex) && !movingBackward) {
-            container.scrollTop = practiceState.lockedScrollTop;
-            return;
-        }
-
-        if (!movingBackward && practiceState.currentIndex <= practiceState.lastScrolledIndex) {
-            container.scrollTop = practiceState.lockedScrollTop;
-            return;
-        }
-
+        if (practiceState.currentIndex === practiceState.lastScrollCheckIndex) return;
+        const previousCheckedIndex = practiceState.lastScrollCheckIndex;
         const activeWord = document.getElementById(`word-${practiceState.currentIndex}`);
         if (!activeWord) return;
+        practiceState.lastScrollCheckIndex = practiceState.currentIndex;
 
-        const lineHeight = parseFloat(getComputedStyle(activeWord).lineHeight) || 43;
-
-        practiceState.lastScrolledIndex = practiceState.currentIndex;
-        const lineTop = practiceState.scrollTriggerTops[practiceState.currentIndex] ?? activeWord.offsetTop;
-        practiceState.lastScrolledLineTop = lineTop;
+        const containerRect = container.getBoundingClientRect();
+        const activeRect = activeWord.getBoundingClientRect();
+        const activeTop = activeRect.top - containerRect.top - container.clientTop;
+        const lineHeight = parseFloat(getComputedStyle(activeWord.parentElement).lineHeight)
+            || parseFloat(getComputedStyle(activeWord).lineHeight)
+            || 43;
+        const targetActiveTop = Math.max(lineHeight, (container.clientHeight - lineHeight) / 2);
+        const lineThreshold = lineHeight * 0.25;
+        const movingBackward = previousCheckedIndex >= 0
+            && practiceState.currentIndex < previousCheckedIndex;
+        if (movingBackward
+            ? activeTop >= targetActiveTop - lineThreshold
+            : activeTop <= targetActiveTop + lineThreshold) {
+            return;
+        }
+        const scrollAdjustment = activeTop - targetActiveTop;
 
         const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
-        const targetTop = movingBackward
-            ? Math.max(0, Math.min(maxScrollTop, lineTop - lineHeight))
-            : Math.min(maxScrollTop, Math.max(container.scrollTop, lineTop - lineHeight));
+        const targetTop = Math.max(0, Math.min(
+            maxScrollTop,
+            container.scrollTop + scrollAdjustment
+        ));
+        if (Math.abs(targetTop - container.scrollTop) < 1) return;
+        const lineDistance = Math.abs(scrollAdjustment) / Math.max(1, lineHeight);
+        const duration = Math.min(
+            1200,
+            Math.max(160, practiceState.averageWordInterval * 0.65 * Math.max(1, lineDistance))
+        );
+        animatePracticeScroll(container, targetTop, duration);
+        practiceState.lastScrolledIndex = practiceState.currentIndex;
+        practiceState.lastScrolledLineTop = activeTop;
         practiceState.lockedScrollTop = targetTop;
-        container.scrollTop = targetTop;
-
-        // Keep the active line around the second visible line.
     }
 
     function renderTypedExtras() {
@@ -4931,16 +5076,67 @@ if ('serviceWorker' in navigator) {
         while (wordDiv.children.length > displayCharacters.length) wordDiv.lastElementChild.remove();
     }
 
+    function renderPracticeOverflowSeparators(container) {
+        const containerRect = container.getBoundingClientRect();
+        const fontSize = parseFloat(getComputedStyle(container).fontSize) || 24;
+        const separatorSlots = practiceState.overflowVisualSeparators.slice();
+        if (practiceState.overflowCursorSeparatorAfterIndex >= 0
+            && !separatorSlots.some(slot => slot.afterIndex === practiceState.overflowCursorSeparatorAfterIndex)) {
+            separatorSlots.push({
+                afterIndex: practiceState.overflowCursorSeparatorAfterIndex,
+                character: ''
+            });
+        }
+
+        for (const slot of separatorSlots) {
+            const previousWord = document.getElementById(`word-${slot.afterIndex}`);
+            let nextWord = null;
+            for (let index = slot.afterIndex + 1; index <= practiceState.renderedEnd; index++) {
+                const candidate = document.getElementById(`word-${index}`);
+                if (candidate && !candidate.classList.contains('practice-hidden')) {
+                    nextWord = candidate;
+                    break;
+                }
+            }
+            if (!previousWord || !nextWord) continue;
+
+            const previousRect = previousWord.getBoundingClientRect();
+            const nextRect = nextWord.getBoundingClientRect();
+            const sameLine = Math.abs(previousRect.top - nextRect.top) < 2;
+            const left = sameLine
+                ? (previousRect.right + nextRect.left) / 2 - containerRect.left - fontSize * 0.3
+                : nextRect.left - containerRect.left - fontSize * 0.3;
+            const top = (sameLine
+                ? Math.max(previousRect.top, nextRect.top)
+                : nextRect.top) - containerRect.top;
+            const marker = document.createElement('span');
+            marker.className = 'practice-overflow-slot';
+            marker.id = `practice-overflow-separator-${slot.afterIndex}`;
+            marker.style.left = `${left}px`;
+            marker.style.top = `${top}px`;
+            if (slot.character) marker.textContent = slot.character;
+            if (practiceState.overflowCursorSeparatorAfterIndex === slot.afterIndex) {
+                const cursor = document.createElement('span');
+                cursor.className = 'monkey-cursor';
+                marker.appendChild(cursor);
+            }
+            container.appendChild(marker);
+        }
+    }
+
     function updateMonkeyVisuals() {
         announceActivePracticeItem();
+        const container = document.getElementById('monkeyText');
         const needsWindow = practiceState.currentIndex < practiceState.renderedStart
             || (practiceState.renderedEnd < practiceState.words.length - 1
-                && practiceState.currentIndex >= practiceState.renderedEnd - 20);
+                && practiceState.currentIndex >= practiceState.renderedEnd - 60);
         if (needsWindow) renderMonkeyText();
 
         // Remove any stray cursors first to avoid multiple blinking cursors
         const oldCursor = document.querySelector('#monkeyText .monkey-cursor');
         if (oldCursor) oldCursor.remove();
+        document.querySelectorAll('#monkeyText .practice-overflow-slot')
+            .forEach(element => element.remove());
         renderTypedExtras();
 
         const startIdx = practiceState.renderedStart;
@@ -4954,7 +5150,9 @@ if ('serviceWorker' in navigator) {
             if (!wordDiv) continue;
             if (wordDiv.classList.contains('practice-hidden')) continue;
 
-            let typed = practiceState.typedWords[i] || "";
+            let typed = practiceState.overflowVisualWords?.[i]
+                ?? practiceState.typedWords[i]
+                ?? "";
             
             if (i < practiceState.currentIndex) {
                 wordDiv.classList.remove('active');
@@ -4963,12 +5161,17 @@ if ('serviceWorker' in navigator) {
                 Array.from(wordDiv.children).forEach((span, idx) => {
                     if (span.classList.contains('monkey-cursor')) return;
                     const targetChar = targetWord[idx] || '';
-                    const typedChar = typed[idx] || '';
+                    const typedChar = typed[idx];
                     const equal = ignoreCaps
-                        ? typedChar.toLowerCase() === targetChar.toLowerCase()
+                        ? typedChar?.toLowerCase() === targetChar.toLowerCase()
                         : typedChar === targetChar;
-                    span.className = 'letter' + (normalizedTyped === normalizedTarget || (typedChar && equal) ? ' correct' : '');
-                    span.innerText = typedChar || targetChar;
+                    const typedCharacterIsCorrect = typedChar !== undefined
+                        && !/\s/u.test(typedChar)
+                        && (normalizedTyped === normalizedTarget || equal);
+                    span.className = 'letter' + (typedCharacterIsCorrect ? ' correct' : typedChar !== undefined ? ' incorrect' : '');
+                    span.innerText = typedChar === undefined
+                        ? targetChar
+                        : typedChar;
                 });
             } else if (i === practiceState.currentIndex) {
                 wordDiv.classList.add('active');
@@ -4991,7 +5194,7 @@ if ('serviceWorker' in navigator) {
                             : typedChar === targetChar);
                         span.classList.toggle('correct', equal);
                         span.classList.toggle('incorrect', !equal);
-                        span.textContent = /\s/u.test(typedChar) ? targetChar : typedChar;
+                        span.textContent = typedChar;
                     } else {
                         span.textContent = targetChar;
                     }
@@ -5010,16 +5213,18 @@ if ('serviceWorker' in navigator) {
                 wordDiv.classList.remove('active', 'error');
                 const ignoreCapsAhead = practiceState.ignoreCaps;
                 if (typed) {
-                    // Render later input literally so wrong text keeps its width.
-                    wordDiv.innerHTML = '';
-                    for (let j = 0; j < typed.length; j++) {
+                    wordDiv.replaceChildren();
+                    for (let j = 0; j < targetWord.length; j++) {
+                        const typedChar = typed[j];
                         const span = document.createElement('span');
-                        span.className = 'letter ' + (normalizeForComparison(typed) === normalizeForComparison(targetWord) ? 'correct' : 'incorrect');
+                        span.className = 'letter' + (typedChar === undefined ? '' : ' incorrect');
                         span.classList.toggle(
                             'blind-hidden',
-                            practiceState.blindMode && i >= practiceState.currentIndex && j >= typed.length
+                            practiceState.blindMode && typedChar === undefined
                         );
-                        span.innerText = typed[j];
+                        span.innerText = typedChar === undefined
+                            ? targetWord[j]
+                            : typedChar;
                         wordDiv.appendChild(span);
                     }
                     continue;
@@ -5059,7 +5264,7 @@ if ('serviceWorker' in navigator) {
                 span.classList.toggle('blind-hidden', practiceState.blindMode && i >= practiceState.currentIndex && j >= typedLength);
 
                 if (j < typed.length) {
-                    const typedChar = typed[j] || '';
+                    const typedChar = typed[j] ?? '';
                     const targetChar = targetWord[j] || '';
                     let equal = typedChar === targetChar;
                     if (ignoreCaps) equal = (typedChar.toLowerCase() === targetChar.toLowerCase());
@@ -5114,9 +5319,15 @@ if ('serviceWorker' in navigator) {
             }
         }
 
-        const cursorHost = practiceState.extraTypedWords.length > 0
-            ? document.querySelector('.typed-extra')
-            : document.getElementById(`word-${practiceState.currentIndex}`);
+        renderPracticeOverflowSeparators(container);
+        const cursorWordIndex = practiceState.overflowVisualWords
+            ? practiceState.overflowCursorIndex
+            : practiceState.currentIndex;
+        const cursorHost = practiceState.overflowCursorSeparatorAfterIndex >= 0
+            ? null
+            : practiceState.extraTypedWords.length > 0
+                ? document.querySelector('.typed-extra')
+                : document.getElementById(`word-${cursorWordIndex}`);
         if (cursorHost) {
             const cursor = document.createElement('span');
             cursor.className = 'monkey-cursor';
@@ -5125,11 +5336,13 @@ if ('serviceWorker' in navigator) {
             const activeCursorLength = activeTarget.includes(' ')
                 ? activeTypedText.length
                 : activeTypedText.length;
-            const cursorIndex = practiceState.extraTypedWords.length > 0
+            const cursorOffset = practiceState.extraTypedWords.length > 0
                 ? practiceState.extraTypedWords.join(' ').length
-                : Math.min(activeCursorLength, cursorHost.children.length);
+                : practiceState.overflowVisualWords
+                    ? practiceState.overflowCursorOffset
+                    : Math.min(activeCursorLength, cursorHost.children.length);
             const letters = Array.from(cursorHost.children).filter(el => !el.classList.contains('monkey-cursor'));
-            cursorHost.insertBefore(cursor, letters[cursorIndex] || null);
+            cursorHost.insertBefore(cursor, letters[cursorOffset] || null);
         }
         
         updateHint();
@@ -5141,7 +5354,18 @@ if ('serviceWorker' in navigator) {
         const hintEl = document.getElementById('strokeHint');
         const targetWord = practiceState.words[practiceState.currentIndex];
         
-        if (!targetWord) { hintEl.innerHTML = ""; return; }
+        if (!targetWord) {
+            const showEmptyDiagram = settings.profiles[settings.activeProfile].showDiagrams
+                && practiceState.visibility !== 'hidden';
+            const renderKey = showEmptyDiagram ? 'empty-diagram' : 'empty';
+            if (hintEl.dataset.renderKey !== renderKey) {
+                hintEl.innerHTML = showEmptyDiagram
+                    ? `<div class="graph-container" style="justify-content:center; margin-top:10px;"><div class="stroke-graph-step">${generateBoardHTML(null, 'display')}</div></div>`
+                    : '';
+                hintEl.dataset.renderKey = renderKey;
+            }
+            return;
+        }
 
         const limits = practiceState.maxStrokesMap[targetWord] || {min: 1, max: 1, shortest: '', longest: ''};
         const targetLimit = practiceState.hintType === 'longest' ? (limits.max || limits.min || 1) : (limits.min || 1);
@@ -5152,15 +5376,25 @@ if ('serviceWorker' in navigator) {
 
         refreshPracticeAccuracy();
 
-        // Decide whether to reveal stroke diagrams / outlines
-        const shouldShowStrokes = (practiceState.visibility === 'always') || (practiceState.visibility === 'error' && currentStrokes > targetLimit);
-        const renderKey = JSON.stringify([targetWord, targetLimit, targetStroke, practiceState.visibility, shouldShowStrokes, p.showDiagrams]);
+        const isStrokeError = currentStrokes > targetLimit;
+        const showStroke = Boolean(targetStroke)
+            && (practiceState.visibility === 'always'
+                || (practiceState.visibility === 'error' && isStrokeError));
+        const showDiagram = p.showDiagrams && practiceState.visibility !== 'hidden';
+        const renderKey = JSON.stringify([
+            targetWord,
+            targetLimit,
+            targetStroke,
+            practiceState.visibility,
+            showStroke,
+            showDiagram
+        ]);
 
         if (hintEl.dataset.renderKey !== renderKey) {
             let displayHTML = '';
-            if (shouldShowStrokes && targetStroke) {
-                const subStrokes = targetStroke.split('/');
-                if (p.showDiagrams) {
+            if (showDiagram) {
+                if (showStroke) {
+                    const subStrokes = targetStroke.split('/');
                     displayHTML = `<div class="graph-container" style="justify-content:center; margin-top:10px;">` + subStrokes.map((s, idx) => {
                         const keys = parseStrokeToKeys(s);
                         let res = `<div class="stroke-graph-step">` + generateBoardHTML(keys, 'display') + `</div>`;
@@ -5168,8 +5402,16 @@ if ('serviceWorker' in navigator) {
                         return res;
                     }).join('') + `</div>`;
                 } else {
+                    displayHTML = `<div class="graph-container" style="justify-content:center; margin-top:10px;"><div class="stroke-graph-step">${generateBoardHTML(null, 'display')}</div></div>`;
+                }
+            } else if (showStroke) {
+                const subStrokes = targetStroke.split('/');
+                if (subStrokes.length) {
                     displayHTML = `<div class="raw-steno" style="display:inline-block; margin-top:10px;">${escapeHtml(targetStroke)}</div>`;
                 }
+            }
+            if (showStroke) {
+                const subStrokes = targetStroke.split('/');
                 displayHTML += `<div class="stroke-hint" style="margin-top:8px;">Normally: ${subStrokes.length} stroke${subStrokes.length>1?'s':''}</div>`;
             }
             hintEl.innerHTML = `<div class="practice-summary"></div>${displayHTML}`;
@@ -5178,7 +5420,7 @@ if ('serviceWorker' in navigator) {
 
         const summaryEl = hintEl.querySelector('.practice-summary');
         if (summaryEl) summaryEl.textContent = `Target: ${targetLimit} stroke${targetLimit > 1 ? 's' : ''} | Used: ${currentStrokes}`;
-        hintEl.style.color = (currentStrokes > targetLimit) ? '#ff5555' : 'var(--text-muted)';
+        hintEl.style.color = isStrokeError ? '#ff5555' : 'var(--text-muted)';
     }
 
     function schedulePracticeSnapshotCheck() {
@@ -5229,6 +5471,115 @@ if ('serviceWorker' in navigator) {
         };
     }
 
+    function buildPracticeOverflowProjection(inputText, startIndex, mismatchIndex, endIndex = practiceState.words.length) {
+        const words = practiceState.words;
+        const typedCharacters = inputText.split('').filter(character =>
+            !practiceState.ignorePunct
+            || practiceState.testMode === 'symbols'
+            || !/\p{P}/u.test(character)
+        );
+        const slots = [];
+        let previousWordIndex = -1;
+        let previousBoundary = '';
+        let previousIsOpeningQuote = false;
+        let quoteIsOpen = words.slice(0, startIndex).filter(word => word === '"').length % 2 === 1;
+
+        const getParts = word => String(word).split(/\s+/u).filter(Boolean);
+        const getBoundaryCharacter = (part, fromStart) => {
+            const characters = String(part);
+            return fromStart ? characters[0] || '' : characters[characters.length - 1] || '';
+        };
+        const appendSlot = slot => {
+            if (slots.length <= typedCharacters.length) slots.push(slot);
+        };
+
+        for (let index = startIndex; index < endIndex && slots.length <= typedCharacters.length; index++) {
+            const target = String(words[index] || '');
+            if (practiceState.ignorePunct
+                && practiceState.testMode !== 'symbols'
+                && isPracticePunctuation(target)) continue;
+
+            const parts = getParts(target);
+            if (!parts.length) continue;
+
+            const firstPart = parts[0];
+            const firstBoundary = getBoundaryCharacter(firstPart, true);
+            const isClosingQuote = firstPart === '"' && quoteIsOpen;
+            if (previousWordIndex >= 0
+                && hasCorrectPracticeSpacing(
+                    previousBoundary,
+                    firstBoundary,
+                    ' ',
+                    previousIsOpeningQuote,
+                    isClosingQuote
+                )) {
+                appendSlot({ type: 'separator', afterIndex: previousWordIndex, target: ' ' });
+            }
+
+            const targetCharacters = target.split('');
+            for (let offset = 0; offset < targetCharacters.length && slots.length <= typedCharacters.length; offset++) {
+                appendSlot({ type: 'character', wordIndex: index, offset, target: targetCharacters[offset] });
+            }
+
+            let lastPart = parts[parts.length - 1];
+            let lastIsOpeningQuote = false;
+            for (const part of parts) {
+                if (part === '"') {
+                    lastIsOpeningQuote = !quoteIsOpen;
+                    quoteIsOpen = !quoteIsOpen;
+                } else {
+                    lastIsOpeningQuote = false;
+                }
+            }
+            previousWordIndex = index;
+            previousBoundary = getBoundaryCharacter(lastPart, false);
+            previousIsOpeningQuote = lastPart === '"' && lastIsOpeningQuote;
+        }
+
+        const visualWords = {};
+        const separators = [];
+        for (let index = 0; index < typedCharacters.length && index < slots.length; index++) {
+            const slot = slots[index];
+            if (slot.type === 'character') {
+                const characters = visualWords[slot.wordIndex] || [];
+                characters[slot.offset] = typedCharacters[index];
+                visualWords[slot.wordIndex] = characters;
+            } else if (!/\s/u.test(typedCharacters[index])) {
+                separators.push({
+                    afterIndex: slot.afterIndex,
+                    character: typedCharacters[index]
+                });
+            }
+        }
+
+        let cursorWordIndex = mismatchIndex;
+        let cursorOffset = 0;
+        let cursorSeparatorAfterIndex = -1;
+        const cursorSlot = slots[typedCharacters.length];
+        if (cursorSlot?.type === 'character') {
+            cursorWordIndex = cursorSlot.wordIndex;
+            cursorOffset = cursorSlot.offset;
+        } else if (cursorSlot?.type === 'separator') {
+            cursorWordIndex = cursorSlot.afterIndex;
+            cursorSeparatorAfterIndex = cursorSlot.afterIndex;
+        } else if (slots.length) {
+            const lastSlot = slots[slots.length - 1];
+            cursorWordIndex = lastSlot.wordIndex ?? lastSlot.afterIndex;
+            cursorOffset = lastSlot.type === 'character' ? lastSlot.offset + 1 : 0;
+        }
+
+        return {
+            words: Object.fromEntries(Object.entries(visualWords).map(([index, characters]) => [
+                index,
+                characters.join('')
+            ])),
+            separators,
+            cursorWordIndex,
+            cursorOffset,
+            cursorSeparatorAfterIndex
+        };
+    }
+
     function handleTyping(event, forceSnapshot = false) {
         if (practiceState.awaitingNextQuote) {
             const input = document.getElementById('practiceInput');
@@ -5237,6 +5588,7 @@ if ('serviceWorker' in navigator) {
             return;
         }
         const now = performance.now();
+        const previousCurrentIndex = practiceState.currentIndex;
 
         const input = document.getElementById('practiceInput');
         let rawInputVal = input.value;
@@ -5257,6 +5609,15 @@ if ('serviceWorker' in navigator) {
             const selectionEnd = beforeInput?.selectionEnd ?? input.selectionEnd;
             input.setRangeText(missingSpaceData, selectionStart, selectionEnd, 'end');
             rawInputVal = input.value;
+        }
+        if (practiceState.testMode === 'quotes' && /^\s/u.test(rawInputVal)) {
+            const leadingSpaceCount = rawInputVal.length - rawInputVal.replace(/^\s+/u, '').length;
+            rawInputVal = rawInputVal.slice(leadingSpaceCount);
+            input.value = rawInputVal;
+            input.setSelectionRange(
+                Math.max(0, input.selectionStart - leadingSpaceCount),
+                Math.max(0, input.selectionEnd - leadingSpaceCount)
+            );
         }
         let inputVal = rawInputVal.normalize('NFC');
         if (inputVal !== rawInputVal) {
@@ -5286,11 +5647,11 @@ if ('serviceWorker' in navigator) {
             schedulePracticeSnapshotCheck();
         }
 
-        if (!practiceState.sessionStartTime && isInsertion && inputVal.trim()) {
+        if (!practiceState.sessionStartTime && isInsertion && inputVal.length) {
             practiceState.sessionStartTime = now;
             startPracticeCountdown();
         }
-        if (isInsertion && inputVal.trim()) startActiveQuoteTiming();
+        if (isInsertion && inputVal.length) startActiveQuoteTiming();
 
         practiceState.logicalInput = inputVal;
 
@@ -5302,7 +5663,7 @@ if ('serviceWorker' in navigator) {
         practiceState.lastInputValue = inputVal;
 
         // Keep the entire textarea value so spaces and edits remain literal.
-        const parseInputVal = inputVal.replace(/^\s/u, '');
+        const parseInputVal = inputVal;
         const typedArray = parseInputVal.match(/\S+/g) || [];
         const typedTokenMatches = Array.from(parseInputVal.matchAll(/\S+/gu));
         const insertedText = isInsertion && inputVal.startsWith(previousInput)
@@ -5312,6 +5673,11 @@ if ('serviceWorker' in navigator) {
         const words = practiceState.words || [];
 
         const inputStartIndex = Math.min(practiceState.inputStartIndex || 0, words.length);
+        const activeQuoteRange = practiceState.testMode === 'quotes'
+            ? practiceState.quoteRanges.find(range =>
+                range.start <= inputStartIndex && inputStartIndex < range.end)
+            : null;
+        const inputEndIndex = activeQuoteRange?.end ?? words.length;
         const spacingMismatchIndex = findPracticeSpacingMismatch(parseInputVal, words, inputStartIndex);
         const typedPerToken = practiceState.typedWords.slice(0, words.length);
         while (typedPerToken.length < words.length) typedPerToken.push('');
@@ -5321,11 +5687,11 @@ if ('serviceWorker' in navigator) {
         let firstMismatch = -1;
         let hasIncompleteTarget = false;
         const matchedIndices = new Set();
-        if (/^\s/u.test(parseInputVal) && typedArray.length > 0) {
+        if (/^\s/u.test(parseInputVal)) {
             typedPerToken[inputStartIndex] = parseInputVal;
             firstMismatch = inputStartIndex;
         }
-        while (firstMismatch < 0 && tIdx < typedArray.length && wIdx < words.length) {
+        while (firstMismatch < 0 && tIdx < typedArray.length && wIdx < inputEndIndex) {
             if (practiceState.ignorePunct && practiceState.testMode !== 'symbols' && isPracticePunctuation(words[wIdx])) {
                 wIdx++;
                 continue;
@@ -5420,7 +5786,7 @@ if ('serviceWorker' in navigator) {
 
             const segmentTokens = tokenizePracticeText(seg);
             const tokenizedMatchesTargets = segmentTokens.length > 1 &&
-                segmentTokens.length <= words.length - wIdx &&
+                segmentTokens.length <= inputEndIndex - wIdx &&
                 segmentTokens.every((token, offset) => {
                     const targetIndex = wIdx + offset;
                     const tokenTarget = words[targetIndex];
@@ -5462,9 +5828,20 @@ if ('serviceWorker' in navigator) {
             break;
         }
 
+        let quoteBoundaryOverflow = false;
+        if (firstMismatch < 0 && activeQuoteRange
+            && wIdx >= inputEndIndex && tIdx < typedArray.length) {
+            const lastQuoteIndex = activeQuoteRange.end - 1;
+            const overflowStart = typedTokenMatches[tIdx]?.index ?? parseInputVal.length;
+            typedPerToken[lastQuoteIndex] =
+                `${typedPerToken[lastQuoteIndex] || ''} ${parseInputVal.slice(overflowStart)}`;
+            firstMismatch = lastQuoteIndex;
+            quoteBoundaryOverflow = true;
+        }
+
         const trailingWhitespace = parseInputVal.match(/\s+$/u)?.[0] || '';
         if (firstMismatch < 0 && !hasIncompleteTarget && trailingWhitespace
-            && wIdx > inputStartIndex && wIdx < words.length) {
+            && wIdx > inputStartIndex && wIdx < inputEndIndex) {
             const previousTarget = String(words[wIdx - 1] || '');
             const nextTarget = String(words[wIdx] || '');
             const expectsSeparator = hasCorrectPracticeSpacing(
@@ -5484,14 +5861,32 @@ if ('serviceWorker' in navigator) {
         }
 
         practiceState.mismatchIndex = firstMismatch;
-        practiceState.extraTypedWords = firstMismatch >= 0 && spacingMismatchIndex !== firstMismatch
-            ? typedArray.slice(tIdx)
-            : [];
+        practiceState.overflowVisualWords = null;
+        practiceState.overflowVisualSeparators = [];
+        practiceState.overflowIncorrectFromIndex = -1;
+        practiceState.overflowCursorIndex = -1;
+        practiceState.overflowCursorOffset = 0;
+        practiceState.overflowCursorSeparatorAfterIndex = -1;
+        if (firstMismatch >= 0 && !quoteBoundaryOverflow) {
+            const projection = buildPracticeOverflowProjection(
+                parseInputVal,
+                inputStartIndex,
+                firstMismatch,
+                inputEndIndex
+            );
+            practiceState.overflowVisualWords = projection.words;
+            practiceState.overflowVisualSeparators = projection.separators;
+            practiceState.overflowIncorrectFromIndex = firstMismatch;
+            practiceState.overflowCursorIndex = projection.cursorWordIndex;
+            practiceState.overflowCursorOffset = projection.cursorOffset;
+            practiceState.overflowCursorSeparatorAfterIndex = projection.cursorSeparatorAfterIndex;
+        }
+        practiceState.extraTypedWords = [];
         practiceState.typedEndIndex = Math.max(-1, wIdx - 1);
 
         // If ignore punctuation is enabled, auto-skip remaining punctuation tokens when counting completed words
         if (firstMismatch < 0 && practiceState.ignorePunct) {
-            while (wIdx < words.length && isPracticePunctuation(words[wIdx])) wIdx++;
+            while (wIdx < inputEndIndex && isPracticePunctuation(words[wIdx])) wIdx++;
         }
 
         practiceState.typedWords = typedPerToken;
@@ -5527,6 +5922,16 @@ if ('serviceWorker' in navigator) {
             if (lastCompletedIndex >= inputStartIndex) nextIndex = lastCompletedIndex;
         }
         practiceState.currentIndex = Math.max(0, nextIndex);
+        if (practiceState.currentIndex > previousCurrentIndex) {
+            if (practiceState.lastInputTime) {
+                const wordsAdvanced = practiceState.currentIndex - previousCurrentIndex;
+                const measuredInterval = (now - practiceState.lastInputTime) / wordsAdvanced;
+                const boundedInterval = Math.min(3000, Math.max(80, measuredInterval));
+                practiceState.averageWordInterval =
+                    practiceState.averageWordInterval * 0.65 + boundedInterval * 0.35;
+            }
+            practiceState.lastInputTime = now;
+        }
         completeReachedPracticeQuotes();
 
         if (practiceState.isEndless && practiceState.testMode !== 'quotes') {
@@ -5746,6 +6151,7 @@ if ('serviceWorker' in navigator) {
         }
         document.getElementById('practiceArena').style.display = 'none';
         document.getElementById('practiceResults').style.display = 'block';
+        document.querySelector('main').classList.remove('practice-session-active');
 
         const finalStats = calculateLiveStats();
 
@@ -6048,6 +6454,7 @@ if ('serviceWorker' in navigator) {
     function resetPracticeUI() {
         document.getElementById('practiceResults').style.display = 'none';
         document.getElementById('practiceSetup').style.display = 'block';
+        document.querySelector('main').classList.remove('practice-session-active');
         drawPersistentProgressGraph();
         renderPersistentProblemWords();
     }

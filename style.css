@@ -706,13 +706,17 @@
 
         /* Monkeytype Typing UI */
         #practiceInput {
-            position: absolute;
-            top: 0; left: 0;
+            position: fixed;
+            top: 0;
+            left: 0;
             opacity: 0;
-            pointer-events: auto;
-            width: 100%;
-            height: 100%;
-            z-index: 2;
+            pointer-events: none;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            border: 0;
+            overflow: hidden;
+            resize: none;
             background: transparent;
             color: transparent;
         }
@@ -746,6 +750,19 @@
             font-size: clamp(1.35rem, 3.2vw, 2rem);
             line-height: 1.9;
             white-space: normal;
+            position: relative;
+        }
+        .practice-text-spacer {
+            flex: 0 0 100%;
+            pointer-events: none;
+        }
+        .practice-quote-trailing-space {
+            flex: 0 0 0.38em;
+            width: 0.38em;
+            margin-left: -0.38em;
+            color: var(--practice-untyped);
+            white-space: pre;
+            pointer-events: none;
         }
         .monkey-word {
             display: inline-flex;
@@ -767,6 +784,15 @@
         .hidden-punct { display: none; }
         .practice-hidden { display: none; }
         .typed-extra .letter { color: var(--practice-wrong); }
+        .practice-overflow-slot {
+            position: absolute;
+            z-index: 1;
+            display: inline-flex;
+            align-items: center;
+            color: var(--practice-wrong);
+            white-space: pre;
+            pointer-events: none;
+        }
 
         /* Practice toggle buttons (match options menu style) */
         .practice-toggle {
@@ -822,6 +848,32 @@
             margin-right: -1px;
             vertical-align: bottom;
             top: 0.1em;
+        }
+        main.practice-session-active {
+            min-height: 0;
+            gap: 0;
+            padding-bottom: 12px;
+            overflow: hidden;
+        }
+        main.practice-session-active #practiceView {
+            display: flex !important;
+            flex: 1 1 0;
+            flex-direction: column;
+            min-height: 0;
+        }
+        main.practice-session-active #practiceArena {
+            flex: 1 1 0;
+            min-height: 0;
+        }
+        main.practice-session-active #practiceArena .monkey-container {
+            flex: 1 1 0;
+            height: auto;
+            min-height: 0;
+            margin-top: 8px;
+        }
+        main.practice-session-active #practiceArena .stroke-hint {
+            flex: 0 0 auto;
+            margin-top: 8px;
         }
         @keyframes blink { 50% { opacity: 0; } }
 
@@ -932,6 +984,7 @@
         }
         .site-brand span { color: var(--accent); }
         .site-header-caption { font-size: 0.7rem; letter-spacing: 0.16em; }
+        #practiceView { flex-direction: column; }
         #menuToggle {
             border: 0;
             border-radius: 50%;
@@ -1038,7 +1091,6 @@
         .test-toolbar > .test-setting,
         .practice-mode-controls .test-setting { align-items: center; text-align: center; }
         .practice-mode-controls .test-setting { min-width: 128px; }
-        .typing-dashboard[data-mode="jeff-phrasing"] .practice-mode-controls { display: none; }
         .practice-estimate {
             align-self: flex-start;
             margin: -14px 0 -12px;
@@ -1226,9 +1278,24 @@
         .daily-goal-track { height: 3px; overflow: hidden; background: var(--border); }
         .daily-goal-bar { width: 0; height: 100%; background: var(--accent); transition: width 180ms ease; }
         .daily-mode-goals { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-        .daily-mode-goal { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; align-items: center; color: var(--text-muted); font-size: 0.72rem; }
+        .daily-mode-goal { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 5px 10px; align-items: center; color: var(--text-muted); font-size: 0.72rem; }
         .daily-mode-goal strong { margin-left: 5px; color: var(--text); font-weight: 500; }
         .daily-mode-goal input { width: 58px; min-height: 26px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); color: var(--text); text-align: center; }
+        .daily-mode-goal .daily-goal-practice-button {
+            display: inline-grid;
+            width: 25px;
+            height: 25px;
+            padding: 0;
+            place-items: center;
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--bg);
+            color: var(--accent);
+            font-size: 0.62rem;
+            cursor: pointer;
+        }
+        .daily-mode-goal .daily-goal-practice-button:hover { border-color: var(--accent); background: var(--surface); }
+        .daily-mode-goal .daily-goal-practice-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         .daily-mode-goal .daily-goal-track { grid-column: 1 / -1; }
         .daily-mode-goal input::-webkit-inner-spin-button,
         .daily-mode-goal input::-webkit-outer-spin-button { appearance: none; -webkit-appearance: none; margin: 0; }
@@ -1506,6 +1573,8 @@
             .mode-records { grid-template-columns: 1fr; }
             #liveStatsBar { gap: 10px 16px; }
             .monkey-container { height: clamp(140px, 28vh, 210px); min-height: 140px; padding: 8px 0; }
+            main.practice-session-active { padding-bottom: 10px; }
+            main.practice-session-active #practiceArena .monkey-container { min-height: 0; padding: 8px 0; }
             .monkey-text { justify-content: flex-start; font-size: 1.25rem; line-height: 1.35; }
             .practice-progress-box { min-width: 120px; }
             #sidebar { width: 100vw; }
