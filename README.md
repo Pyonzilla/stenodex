@@ -1,4 +1,4 @@
-# StenoDex V7.8
+# StenoDex V7.9
 https://pyonzilla.github.io/stenodex/
 
 Web app for searching, visualizing and practicing Plover's custom stenography dictionaries.
