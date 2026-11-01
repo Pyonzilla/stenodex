@@ -5917,6 +5917,36 @@ if ('serviceWorker' in navigator) {
             }
         }
 
+        if (activeQuoteRange && spacingMismatchIndex < 0) {
+            const comparableTokens = tokens => tokens.filter(token =>
+                !practiceState.ignorePunct || !isPracticePunctuation(token));
+            const typedQuoteTokens = comparableTokens(tokenizePracticeText(parseInputVal.trim()));
+            const expectedQuoteTokens = comparableTokens(
+                words.slice(activeQuoteRange.start, activeQuoteRange.end)
+            );
+            const quoteInputMatches = typedQuoteTokens.length > 0
+                && typedQuoteTokens.length === expectedQuoteTokens.length
+                && typedQuoteTokens.every((token, index) =>
+                    normalizeForComparison(token) === normalizeForComparison(expectedQuoteTokens[index]));
+            if (quoteInputMatches) {
+                for (let index = activeQuoteRange.start; index < activeQuoteRange.end; index++) {
+                    const target = String(words[index]);
+                    typedPerToken[index] = target;
+                    if (!matchedIndices.has(index)) {
+                        matchedIndices.add(index);
+                        if (!practiceState.completedIndices.has(index)) {
+                            practiceState.completedIndices.add(index);
+                            registerCorrectPracticeWord(target);
+                        }
+                        recordCompletedPracticeWord(index, target);
+                    }
+                }
+                firstMismatch = -1;
+                hasIncompleteTarget = false;
+                wIdx = inputEndIndex;
+            }
+        }
+
         practiceState.mismatchIndex = firstMismatch;
         practiceState.overflowVisualWords = null;
         practiceState.overflowVisualSeparators = [];
