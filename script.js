@@ -4200,8 +4200,9 @@ if ('serviceWorker' in navigator) {
             const digitCount = Math.max(1, Math.min(36, Number(document.getElementById('practiceNumberDigits').value) || 6));
             const format = document.getElementById('practiceNumberFormat').value;
             const groups = Array.from({ length: groupCount }, () => {
-                let digits = Array.from({ length: digitCount }, () => String(Math.floor(Math.random() * 10))).join('');
-                digits = digits.replace(/^0+(?=\d)/u, '');
+                const groupDigitCount = Math.floor(Math.random() * digitCount) + 1;
+                const digits = String(Math.floor(Math.random() * 9) + 1)
+                    + Array.from({ length: groupDigitCount - 1 }, () => String(Math.floor(Math.random() * 10))).join('');
                 const useWords = format === 'words' || (format === 'mixed' && Math.random() < 0.5);
                 return useWords ? numberToPracticeWords(digits) : digits;
             });
