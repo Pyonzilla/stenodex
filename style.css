@@ -950,11 +950,15 @@
         .practice-progress-bar { height: 100%; width: 0; background: var(--accent); transition: width 0.15s ease-out; }
 
         /* Minimal typing-test interface */
-        html { background: var(--bg); }
+        html {
+            background: var(--bg);
+            overflow-anchor: none;
+        }
         body {
             background: var(--bg);
             color: var(--text-main);
             font-family: "Roboto Mono", "SFMono-Regular", Consolas, monospace;
+            overflow-anchor: none;
         }
         .site-header {
             display: flex;
@@ -1124,6 +1128,7 @@
         .jeff-phrasing-setting { display: none; }
         .typing-dashboard[data-mode="time"] .test-duration-setting,
         .typing-dashboard[data-mode="words"] .test-word-setting,
+        .typing-dashboard[data-mode="scrambled-words"] .test-word-setting,
         .typing-dashboard[data-mode="quotes"] .test-quote-setting,
         .typing-dashboard[data-mode="numbers"] .test-number-setting,
         .typing-dashboard[data-mode="symbols"] .test-symbol-setting,
@@ -1193,7 +1198,8 @@
         .typing-dashboard[data-mode="symbols"] .quote-length-setting,
         .typing-dashboard[data-mode="problematic"] .quote-length-setting,
         .typing-dashboard[data-mode="briefs"] .quote-length-setting { display: none; }
-        .typing-dashboard[data-mode="jeff-phrasing"] .quote-length-setting { display: none; }
+        .typing-dashboard[data-mode="jeff-phrasing"] .quote-length-setting,
+        .typing-dashboard[data-mode="scrambled-words"] .quote-length-setting { display: flex; }
         .daily-goal-panel {
             position: relative;
             display: grid;
