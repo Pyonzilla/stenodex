@@ -65,8 +65,8 @@ if ('serviceWorker' in navigator) {
         
         settings.customTheme = settings.customTheme || {
             bg: '#000000', surface: '#111111', surfaceHover: '#222222', 
-            border: '#333333', text: '#ffffff', accent: '#ff0055',
-            practiceUntyped: '#888888', practiceCorrect: '#ffffff', practiceWrong: '#ff5555', practiceCursor: '#ff0055'
+            border: '#333333', text: '#ffffff', accent: '#ff9500',
+            practiceUntyped: '#888888', practiceCorrect: '#ffffff', practiceWrong: '#ff5555', practiceCursor: '#ff9500'
         };
         settings.activeProfile = settings.activeProfile || 1;
         settings.searchMode = settings.searchMode || 'word';
@@ -115,8 +115,8 @@ if ('serviceWorker' in navigator) {
 
     const DEFAULT_CUSTOM_THEME = {
         bg: '#000000', surface: '#111111', surfaceHover: '#222222', border: '#333333',
-        text: '#ffffff', textMuted: '#888888', accent: '#ff0055', accentInvert: '#000000',
-        practiceUntyped: '#888888', practiceCorrect: '#ffffff', practiceWrong: '#ff5555', practiceCursor: '#ff0055',
+        text: '#ffffff', textMuted: '#888888', accent: '#ff9500', accentInvert: '#000000',
+        practiceUntyped: '#888888', practiceCorrect: '#ffffff', practiceWrong: '#ff5555', practiceCursor: '#ff9500',
         practiceProblematic: '#63b8ff', practiceBrief: '#70d6a5',
         statWpm: '#3a86ff', statAcc: '#2ec4b6', statStr: '#ff9f1c', statStreak: '#f15bb5'
     };
@@ -5724,7 +5724,7 @@ if ('serviceWorker' in navigator) {
         }
 
         if (!forceSnapshot && inputVal !== previousInput
-            && (isDeletion || (isInsertion && inputVal.trim() && !insertedOnlySpace))) {
+            && isInsertion && inputVal.trim() && !insertedOnlySpace) {
             practiceState.pendingSnapshotInputType = snapshotInputType;
             practiceState.pendingSnapshotIndex = practiceState.currentIndex;
             schedulePracticeSnapshotCheck();
