@@ -2341,7 +2341,8 @@ if ('serviceWorker' in navigator) {
     }
 
     function getSelectedPracticeStrokeLimit(word) {
-        const limits = practiceState.maxStrokesMap[word] || { min: 1, max: 1 };
+        const limits = practiceState.maxStrokesMap[word];
+        if (!limits || (!limits.shortest && !limits.longest)) return null;
         const selectedLimit = practiceState.hintType === 'longest'
             ? (limits.max || limits.min || 1)
             : (limits.min || limits.max || 1);
@@ -2357,7 +2358,7 @@ if ('serviceWorker' in navigator) {
     function recordPracticeMistake(index) {
         const word = practiceState.words[index];
         const targetStrokes = getSelectedPracticeStrokeLimit(word);
-        if ((practiceState.strokeCounts[index] || 0) <= targetStrokes) return;
+        if (targetStrokes === null || (practiceState.strokeCounts[index] || 0) <= targetStrokes) return;
         if (practiceState.correctPracticeIndices.has(index) || practiceState.mistakePracticeIndices.has(index)) return;
         practiceState.mistakePracticeIndices.add(index);
         practiceState.currentStreak = 0;
@@ -2373,7 +2374,8 @@ if ('serviceWorker' in navigator) {
         const typed = typedValue || '';
         const wasAlreadyMissed = practiceState.mistakePracticeIndices.has(index);
         const targetStrokes = getSelectedPracticeStrokeLimit(word);
-        const missed = wasAlreadyMissed || (practiceState.strokeCounts[index] || 0) > targetStrokes;
+        const missed = wasAlreadyMissed || (targetStrokes !== null
+            && (practiceState.strokeCounts[index] || 0) > targetStrokes);
         if (missed) {
             trackPracticeErrorWord(word);
             if (!wasAlreadyMissed) registerProblemPracticeWord(word);
@@ -5369,11 +5371,10 @@ if ('serviceWorker' in navigator) {
             }
             
             if (i < practiceState.currentIndex) {
-                const limits = practiceState.maxStrokesMap[targetWord] || {min: 1, max: 1};
-                const targetLimit = limits.min;
+                const targetLimit = getSelectedPracticeStrokeLimit(targetWord);
                 const actualStrokes = practiceState.strokeCounts[i] || 1;
                 
-                if (typed !== targetWord || actualStrokes > targetLimit) {
+                if (typed !== targetWord || (targetLimit !== null && actualStrokes > targetLimit)) {
                     wordDiv.classList.add('error');
                 } else {
                     wordDiv.classList.remove('error');
@@ -5438,7 +5439,7 @@ if ('serviceWorker' in navigator) {
         }
 
         const limits = practiceState.maxStrokesMap[targetWord] || {min: 1, max: 1, shortest: '', longest: ''};
-        const targetLimit = practiceState.hintType === 'longest' ? (limits.max || limits.min || 1) : (limits.min || 1);
+        const targetLimit = getSelectedPracticeStrokeLimit(targetWord);
         const targetStroke = practiceState.hintType === 'longest' ? (limits.longest || limits.shortest || '') : (limits.shortest || limits.longest || '');
         
         const currentStrokes = practiceState.strokeCounts[hintIndex] || 0;
@@ -5446,7 +5447,7 @@ if ('serviceWorker' in navigator) {
 
         refreshPracticeAccuracy();
 
-        const isStrokeError = currentStrokes > targetLimit;
+        const isStrokeError = targetLimit !== null && currentStrokes > targetLimit;
         const showStroke = Boolean(targetStroke)
             && (practiceState.visibility === 'always'
                 || (practiceState.visibility === 'error' && isStrokeError));
@@ -5489,7 +5490,12 @@ if ('serviceWorker' in navigator) {
         }
 
         const summaryEl = hintEl.querySelector('.practice-summary');
-        if (summaryEl) summaryEl.textContent = `Target: ${targetLimit} stroke${targetLimit > 1 ? 's' : ''} | Used: ${currentStrokes}`;
+        if (summaryEl) {
+            const targetSummary = targetLimit === null
+                ? 'Target: unknown'
+                : `Target: ${targetLimit} stroke${targetLimit > 1 ? 's' : ''}`;
+            summaryEl.textContent = `${targetSummary} | Used: ${currentStrokes}`;
+        }
         hintEl.style.color = isStrokeError ? '#ff5555' : 'var(--text-muted)';
     }
 
@@ -5523,7 +5529,7 @@ if ('serviceWorker' in navigator) {
             (practiceState.strokeCounts[index] || 0) + 1;
 
         const strokeTargetLimit = getSelectedPracticeStrokeLimit(strokeTarget);
-        if ((practiceState.strokeCounts[index] || 0) > strokeTargetLimit) {
+        if (strokeTargetLimit !== null && (practiceState.strokeCounts[index] || 0) > strokeTargetLimit) {
             if (!practiceState.mistakePracticeIndices.has(index)) {
                 practiceState.mistakePracticeIndices.add(index);
                 practiceState.currentStreak = 0;
@@ -5823,8 +5829,9 @@ if ('serviceWorker' in navigator) {
                 }
 
                 if (firstMismatch < 0) firstMismatch = wIdx;
-                if (insertedSpace &&
-                    getPracticeStrokeCountIncludingPending(wIdx) > getSelectedPracticeStrokeLimit(target)) {
+                const targetStrokeLimit = getSelectedPracticeStrokeLimit(target);
+                if (insertedSpace && targetStrokeLimit !== null
+                    && getPracticeStrokeCountIncludingPending(wIdx) > targetStrokeLimit) {
                     practiceState.incorrectWordIndices.add(wIdx);
                 }
                 break;

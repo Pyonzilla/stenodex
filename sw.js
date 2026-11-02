@@ -1,4 +1,4 @@
-const CACHE_NAME = 'stenodex-v8.05';
+const CACHE_NAME = 'stenodex-v8.06';
 const ASSETS = [
     './',
     './index.html',
