@@ -77,6 +77,7 @@
 <div id="sidebar" aria-hidden="true" inert>
     <div class="sidebar-header">
         <a class="site-brand" href="#" onclick="switchTab('practice'); return false;">steno<span>dex</span></a>
+        <button class="sidebar-close" type="button" onclick="toggleSidebar()" aria-label="Close profile options" title="Close profile options">&#10095;</button>
     </div>
 
     <div class="section-title">Profile Selection</div>
@@ -202,6 +203,10 @@
 
 <header class="site-header">
     <a class="site-brand" href="#" onclick="switchTab('practice'); return false;">steno<span>dex</span></a>
+    <nav class="view-tabs" id="viewTabs" role="tablist" aria-label="Main views">
+        <button id="searchTab" type="button" role="tab" aria-controls="searchView" aria-selected="true" tabindex="0" class="active" onclick="switchTab('search')">Search</button>
+        <button id="practiceTab" type="button" role="tab" aria-controls="practiceView" aria-selected="false" tabindex="-1" onclick="switchTab('practice')">Practice</button>
+    </nav>
     <div class="site-header-actions">
         <div class="site-header-caption">PROFILE OPTIONS</div>
         <button id="menuToggle" type="button" onclick="toggleSidebar()" aria-label="Open profile options" aria-controls="sidebar" aria-expanded="false">&#10094;</button>
@@ -209,11 +214,6 @@
 </header>
 
 <main>
-    <div class="view-tabs" id="viewTabs" role="tablist" aria-label="Main views">
-        <button id="searchTab" type="button" role="tab" aria-controls="searchView" aria-selected="true" tabindex="0" class="active" onclick="switchTab('search')">Dictionary Search</button>
-        <button id="practiceTab" type="button" role="tab" aria-controls="practiceView" aria-selected="false" tabindex="-1" onclick="switchTab('practice')">Practice Mode</button>
-    </div>
-
     <div id="searchView" role="tabpanel" aria-labelledby="searchTab">
         <div class="search-container">
             <div class="search-mode-wrapper">
@@ -246,69 +246,14 @@
                     </div>
                     <div id="dashboardLastPractice" class="dashboard-last-practice">Ready when you are</div>
                 </div>
-                <div id="dailyGoalPanel" class="daily-goal-panel">
-                    <div class="daily-goal-copy">
-                        <span class="dashboard-eyebrow">DAILY PRACTICE GOAL</span>
-                        <span id="dailyGoalMessage">A little practice every day adds up.</span>
-                    </div>
-                    <div class="daily-goal-actions">
-                        <button id="startDailyGoalButton" type="button" onclick="startDailyQuotePractice()">Practice goal</button>
-                    </div>
-                    <div class="daily-mode-goals" aria-label="Daily practice goals">
-                        <div class="daily-mode-goal">
-                            <span>Quotes <strong id="dailyGoalQuoteSummary"><span id="dailyGoalComplete">0</span> / <span id="dailyGoalTotal">5</span></strong><strong id="dailyGoalQuoteSkipped" hidden>Skipped · complete</strong></span>
-                            <input id="dailyGoalInput" type="number" min="0" max="100" value="5" aria-label="Daily quote goal">
-                            <div id="dailyGoalQuoteTrack" class="daily-goal-track" role="progressbar" aria-label="Daily quote goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalBar" class="daily-goal-bar"></div></div>
-                        </div>
-                        <div class="daily-mode-goal">
-                            <span>Words <strong id="dailyGoalWordsSummary"><span id="dailyGoalWordsComplete">0</span> / <span id="dailyGoalWordsTotal">100</span></strong><strong id="dailyGoalWordsSkipped" hidden>Skipped · complete</strong></span>
-                            <input id="dailyGoalWordsInput" type="number" min="0" max="50000" step="10" value="100" aria-label="Daily word goal">
-                            <div id="dailyGoalWordsTrack" class="daily-goal-track" role="progressbar" aria-label="Daily word goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalWordsBar" class="daily-goal-bar"></div></div>
-                        </div>
-                        <div class="daily-mode-goal">
-                            <span>Problematic words <strong id="dailyGoalProblematicProgress">0 / 10</strong></span>
-                            <input id="dailyGoalProblematicInput" type="number" min="0" max="50000" value="10" aria-label="Daily problematic words goal">
-                            <div id="dailyGoalProblematicTrack" class="daily-goal-track" role="progressbar" aria-label="Daily problematic words goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalProblematicBar" class="daily-goal-bar"></div></div>
-                        </div>
-                        <div class="daily-mode-goal">
-                            <span>My briefs <strong id="dailyGoalBriefsProgress">0 / 10</strong></span>
-                            <input id="dailyGoalBriefsInput" type="number" min="0" max="50000" value="10" aria-label="Daily briefs goal">
-                            <div id="dailyGoalBriefsTrack" class="daily-goal-track" role="progressbar" aria-label="Daily briefs goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalBriefsBar" class="daily-goal-bar"></div></div>
-                        </div>
-                        <div class="daily-mode-goal">
-                            <span>Accuracy >95% <strong id="dailyGoalAccuracyProgress">0 / 5</strong></span>
-                            <input id="dailyGoalAccuracyInput" type="number" min="0" max="50000" value="5" aria-label="Daily above 95 percent accuracy goal">
-                            <div id="dailyGoalAccuracyTrack" class="daily-goal-track" role="progressbar" aria-label="Daily above 95 percent accuracy goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalAccuracyBar" class="daily-goal-bar"></div></div>
-                        </div>
-                        <div class="daily-mode-goal">
-                            <span>Numbers <strong id="dailyGoalNumbersProgress">0 / 10</strong></span>
-                            <input id="dailyGoalNumbersInput" type="number" min="0" max="50000" value="10" aria-label="Daily numbers goal">
-                            <div id="dailyGoalNumbersTrack" class="daily-goal-track" role="progressbar" aria-label="Daily numbers goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalNumbersBar" class="daily-goal-bar"></div></div>
-                        </div>
-                        <div class="daily-mode-goal">
-                            <span>Symbols <strong id="dailyGoalSymbolsProgress">0 / 25</strong></span>
-                            <input id="dailyGoalSymbolsInput" type="number" min="0" max="50000" value="25" aria-label="Daily symbols goal">
-                            <div id="dailyGoalSymbolsTrack" class="daily-goal-track" role="progressbar" aria-label="Daily symbols goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalSymbolsBar" class="daily-goal-bar"></div></div>
-                        </div>
-                        <div class="daily-mode-goal">
-                            <span>Jeff phrases <strong id="dailyGoalJeffPhrasesProgress">0 / 10</strong></span>
-                            <input id="dailyGoalJeffPhrasesInput" type="number" min="0" max="50000" value="10" aria-label="Daily Jeff Phrasing goal">
-                            <div id="dailyGoalJeffPhrasesTrack" class="daily-goal-track" role="progressbar" aria-label="Daily Jeff Phrasing goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalJeffPhrasesBar" class="daily-goal-bar"></div></div>
-                        </div>
-                    </div>
-                    <div class="wpm-milestone-panel">
-                        <span class="dashboard-eyebrow">PERSONAL SPEED MILESTONES</span>
-                        <div id="wpmMilestones" class="wpm-milestones" role="meter" aria-label="Personal best speed milestones"></div>
-                    </div>
-                </div>
-
                 <div class="test-toolbar" aria-label="Practice test settings">
                     <label class="test-setting">
                         <span>Mode</span>
                         <select id="practiceTestMode">
                             <option value="quote">Quote</option>
                             <option value="time">Time</option>
-                            <option value="words">Words</option>
+                            <option value="words">Unrestricted Words</option>
+                            <option value="scrambled-words">Scrambled Words</option>
                             <option value="quotes">Quotes</option>
                             <option value="daily">Daily goal</option>
                             <option value="numbers">Numbers</option>
@@ -319,6 +264,32 @@
                             <option value="lesson">Lesson / custom</option>
                         </select>
                     </label>
+                    <div class="practice-mode-controls" aria-label="Practice order and stroke settings">
+                        <label class="test-setting practice-order-setting">
+                            <span>Word order</span>
+                            <select id="practiceMode" class="profile-select">
+                                <option value="random">Random</option>
+                                <option value="ordered">Ordered</option>
+                                <option value="random-pyramid">Random pyramid</option>
+                                <option value="ordered-pyramid">Ordered pyramid</option>
+                            </select>
+                        </label>
+                        <label class="test-setting">
+                            <span>Target strokes</span>
+                            <select id="strokeHintType" class="profile-select">
+                                <option value="shortest">Shortest form</option>
+                                <option value="longest">Longest form</option>
+                            </select>
+                        </label>
+                        <label class="test-setting">
+                            <span>Stroke hints</span>
+                            <select id="strokeVisibility" class="profile-select">
+                                <option value="always">Always show</option>
+                                <option value="error">Show on error</option>
+                                <option value="hidden">Hide</option>
+                            </select>
+                        </label>
+                    </div>
                     <label class="test-setting test-language-setting">
                         <span>Language</span>
                         <select id="quoteLanguage" aria-label="Quote language">
@@ -361,6 +332,7 @@
                             <option value="100">100 words</option>
                             <option value="250">250 words</option>
                             <option value="500">500 words</option>
+                            <option value="endless">Endless</option>
                         </select>
                     </label>
                     <label class="test-setting test-quote-setting">
@@ -371,6 +343,7 @@
                             <option value="10">10 quotes</option>
                             <option value="25">25 quotes</option>
                             <option value="50">50 quotes</option>
+                            <option value="endless">Endless</option>
                         </select>
                     </label>
                     <label class="test-setting test-number-setting" hidden>
@@ -381,10 +354,11 @@
                             <option value="50" selected>50 groups</option>
                             <option value="100">100 groups</option>
                             <option value="250">250 groups</option>
+                            <option value="endless">Endless</option>
                         </select>
                     </label>
                     <label class="test-setting test-number-setting" hidden>
-                        <span>Digits per group</span>
+                        <span>Maximum digits per group</span>
                         <select id="practiceNumberDigits">
                             <option value="1">1 digit</option>
                             <option value="2">2 digits</option>
@@ -416,6 +390,33 @@
                             <option value="50" selected>50 symbols</option>
                             <option value="100">100 symbols</option>
                             <option value="250">250 symbols</option>
+                            <option value="endless">Endless</option>
+                        </select>
+                    </label>
+                    <label class="test-setting test-problematic-setting" hidden>
+                        <span>Problematic word count</span>
+                        <select id="practiceProblematicCount">
+                            <option value="all" selected>All available</option>
+                            <option value="10">10 words</option>
+                            <option value="25">25 words</option>
+                            <option value="50">50 words</option>
+                            <option value="100">100 words</option>
+                            <option value="250">250 words</option>
+                            <option value="500">500 words</option>
+                            <option value="endless">Endless</option>
+                        </select>
+                    </label>
+                    <label class="test-setting test-briefs-setting" hidden>
+                        <span>Brief count</span>
+                        <select id="practiceBriefCount">
+                            <option value="all" selected>All available</option>
+                            <option value="10">10 briefs</option>
+                            <option value="25">25 briefs</option>
+                            <option value="50">50 briefs</option>
+                            <option value="100">100 briefs</option>
+                            <option value="250">250 briefs</option>
+                            <option value="500">500 briefs</option>
+                            <option value="endless">Endless</option>
                         </select>
                     </label>
                     <label class="test-setting jeff-phrasing-setting" hidden>
@@ -425,6 +426,7 @@
                             <option value="25" selected>25 phrases</option>
                             <option value="50">50 phrases</option>
                             <option value="100">100 phrases</option>
+                            <option value="endless">Endless</option>
                         </select>
                     </label>
                     <label class="test-setting jeff-phrasing-setting" hidden>
@@ -509,11 +511,11 @@
                     </div>
                 </div>
 
+                <div id="practiceEstimate" class="practice-estimate">Estimated time: 0:00</div>
                 <details class="advanced-practice">
                     <summary>Custom material &amp; steno options</summary>
                     <div class="practice-config-heading">
                         <h2>Practice Configuration</h2>
-                        <div id="practiceEstimate" class="practice-estimate">Estimated time: 0:00</div>
                     </div>
                     <textarea id="practiceMaterial" placeholder="Paste your practice text here... Or paste Typey Type format (Word [tab] STROKE) or Plover Clippy Tape logs to practice exact outlines!"></textarea>
                     <div class="saved-materials-row">
@@ -527,24 +529,6 @@
                     <div id="quoteControls" class="quote-controls">
                         <button id="newQuoteButton" class="hidden" onclick="chooseNewQuote()">New Quote</button>
                         <button id="clearPracticeButton" onclick="clearPracticeMaterial()" title="Clear practice text">Clear</button>
-                    </div>
-
-                    <div class="practice-settings-group practice-select-row">
-                        <select id="practiceMode" class="profile-select">
-                            <option value="random">Words in Random Order</option>
-                            <option value="ordered">Words in Ordered Order</option>
-                            <option value="random-pyramid">Words in Random Pyramid</option>
-                            <option value="ordered-pyramid">Words in Ordered Pyramid</option>
-                        </select>
-                        <select id="strokeHintType" class="profile-select">
-                            <option value="shortest">Target: Shortest Form</option>
-                            <option value="longest">Target: Longest Form</option>
-                        </select>
-                        <select id="strokeVisibility" class="profile-select">
-                            <option value="always">Always Show Strokes</option>
-                            <option value="error">Show Strokes on Error</option>
-                            <option value="hidden">Hide Strokes</option>
-                        </select>
                     </div>
 
                     <div class="practice-settings-group practice-options-row">
@@ -596,6 +580,90 @@
                     </details>
                 </details>
 
+                <div class="daily-insights-layout">
+                    <div id="dailyGoalPanel" class="daily-goal-panel">
+                        <div class="daily-goal-copy">
+                            <span class="dashboard-eyebrow">DAILY PRACTICE GOAL</span>
+                            <span id="dailyGoalMessage">A little practice every day adds up.</span>
+                        </div>
+                        <div class="daily-goal-actions">
+                            <button id="startDailyGoalButton" type="button" onclick="startDailyQuotePractice()">Practice goal</button>
+                        </div>
+                        <div class="daily-mode-goals" aria-label="Daily practice goals">
+                            <div class="daily-mode-goal">
+                                <span>Quotes <strong id="dailyGoalQuoteSummary"><span id="dailyGoalComplete">0</span> / <span id="dailyGoalTotal">5</span></strong><strong id="dailyGoalQuoteSkipped" hidden>Skipped · complete</strong></span>
+                                <input id="dailyGoalInput" type="number" min="0" max="100" value="5" aria-label="Daily quote goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('quotes', 'dailyGoalInput')" aria-label="Practice quote goal" title="Practice quote goal">▶</button>
+                                <div id="dailyGoalQuoteTrack" class="daily-goal-track" role="progressbar" aria-label="Daily quote goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalBar" class="daily-goal-bar"></div></div>
+                            </div>
+                            <div class="daily-mode-goal">
+                                <span>Words <strong id="dailyGoalWordsSummary"><span id="dailyGoalWordsComplete">0</span> / <span id="dailyGoalWordsTotal">100</span></strong><strong id="dailyGoalWordsSkipped" hidden>Skipped · complete</strong></span>
+                                <input id="dailyGoalWordsInput" type="number" min="0" max="50000" step="10" value="100" aria-label="Daily word goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('words', 'dailyGoalWordsInput')" aria-label="Practice word goal" title="Practice word goal">▶</button>
+                                <div id="dailyGoalWordsTrack" class="daily-goal-track" role="progressbar" aria-label="Daily word goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalWordsBar" class="daily-goal-bar"></div></div>
+                            </div>
+                            <div class="daily-mode-goal">
+                                <span>Problematic words <strong id="dailyGoalProblematicProgress">0 / 10</strong></span>
+                                <input id="dailyGoalProblematicInput" type="number" min="0" max="50000" value="10" aria-label="Daily problematic words goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('problematic', 'dailyGoalProblematicInput')" aria-label="Practice problematic words goal" title="Practice problematic words goal">▶</button>
+                                <div id="dailyGoalProblematicTrack" class="daily-goal-track" role="progressbar" aria-label="Daily problematic words goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalProblematicBar" class="daily-goal-bar"></div></div>
+                            </div>
+                            <div class="daily-mode-goal">
+                                <span>My briefs <strong id="dailyGoalBriefsProgress">0 / 10</strong></span>
+                                <input id="dailyGoalBriefsInput" type="number" min="0" max="50000" value="10" aria-label="Daily briefs goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('briefs', 'dailyGoalBriefsInput')" aria-label="Practice briefs goal" title="Practice briefs goal">▶</button>
+                                <div id="dailyGoalBriefsTrack" class="daily-goal-track" role="progressbar" aria-label="Daily briefs goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalBriefsBar" class="daily-goal-bar"></div></div>
+                            </div>
+                            <div class="daily-mode-goal">
+                                <span>Accuracy &gt;95% <strong id="dailyGoalAccuracyProgress">0 / 5</strong></span>
+                                <input id="dailyGoalAccuracyInput" type="number" min="0" max="50000" value="5" aria-label="Daily above 95 percent accuracy goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('quote', 'dailyGoalAccuracyInput')" aria-label="Practice for the accuracy goal" title="Practice for the accuracy goal">▶</button>
+                                <div id="dailyGoalAccuracyTrack" class="daily-goal-track" role="progressbar" aria-label="Daily above 95 percent accuracy goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalAccuracyBar" class="daily-goal-bar"></div></div>
+                            </div>
+                            <div class="daily-mode-goal">
+                                <span>Numbers <strong id="dailyGoalNumbersProgress">0 / 10</strong></span>
+                                <input id="dailyGoalNumbersInput" type="number" min="0" max="50000" value="10" aria-label="Daily numbers goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('numbers', 'dailyGoalNumbersInput')" aria-label="Practice numbers goal" title="Practice numbers goal">▶</button>
+                                <div id="dailyGoalNumbersTrack" class="daily-goal-track" role="progressbar" aria-label="Daily numbers goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalNumbersBar" class="daily-goal-bar"></div></div>
+                            </div>
+                            <div class="daily-mode-goal">
+                                <span>Symbols <strong id="dailyGoalSymbolsProgress">0 / 25</strong></span>
+                                <input id="dailyGoalSymbolsInput" type="number" min="0" max="50000" value="25" aria-label="Daily symbols goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('symbols', 'dailyGoalSymbolsInput')" aria-label="Practice symbols goal" title="Practice symbols goal">▶</button>
+                                <div id="dailyGoalSymbolsTrack" class="daily-goal-track" role="progressbar" aria-label="Daily symbols goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalSymbolsBar" class="daily-goal-bar"></div></div>
+                            </div>
+                            <div class="daily-mode-goal">
+                                <span>Jeff phrases <strong id="dailyGoalJeffPhrasesProgress">0 / 10</strong></span>
+                                <input id="dailyGoalJeffPhrasesInput" type="number" min="0" max="50000" value="10" aria-label="Daily Jeff Phrasing goal">
+                                <button class="daily-goal-practice-button" type="button" onclick="startPracticeGoal('jeff-phrasing', 'dailyGoalJeffPhrasesInput')" aria-label="Practice Jeff Phrasing goal" title="Practice Jeff Phrasing goal">▶</button>
+                                <div id="dailyGoalJeffPhrasesTrack" class="daily-goal-track" role="progressbar" aria-label="Daily Jeff Phrasing goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyGoalJeffPhrasesBar" class="daily-goal-bar"></div></div>
+                            </div>
+                        </div>
+                        <div class="wpm-milestone-panel">
+                            <span class="dashboard-eyebrow">PERSONAL SPEED MILESTONES</span>
+                            <div id="wpmMilestones" class="wpm-milestones" role="meter" aria-label="Personal best speed milestones"></div>
+                        </div>
+                    </div>
+                    <section id="typistAveragesPanel" class="typist-averages-panel" aria-labelledby="typistAveragesTitle">
+                        <div class="dashboard-section-heading">
+                            <h2 id="typistAveragesTitle">Typist averages</h2>
+                            <span>Last 30 days</span>
+                        </div>
+                        <p class="typist-averages-caption">30-day performance averages · daily practice volume</p>
+                        <div id="typistAveragesChart" class="typist-averages-chart" role="img" aria-label="Eight-axis chart of average speed, accuracy, stroke efficiency, and daily practice volume over the last 30 days"></div>
+                        <div class="typist-averages-legend" aria-label="Chart legend">
+                            <span class="typist-legend-wpm">Speed</span>
+                            <span class="typist-legend-accuracy">Accuracy</span>
+                            <span class="typist-legend-strokes">Stroke efficiency</span>
+                            <span class="typist-legend-volume">Daily volume</span>
+                        </div>
+                        <details class="typist-averages-details">
+                            <summary>View exact averages</summary>
+                            <div id="typistAveragesTable" class="typist-averages-table-wrap"></div>
+                        </details>
+                    </section>
+                </div>
+
                 <div class="dashboard-stat-row">
                     <div class="dashboard-stat"><span class="dashboard-eyebrow">DAYS PRACTICED</span><strong id="dashboardDays">0</strong></div>
                     <div class="dashboard-stat"><span class="dashboard-eyebrow">QUOTES TYPED</span><strong id="dashboardQuotes">0</strong></div>
@@ -646,12 +714,12 @@
 
             <div id="liveTestStatus" class="live-test-status"></div>
             <div class="monkey-container" id="monkeyContainer">
-                <textarea id="practiceInput" aria-label="Type the displayed practice text" autocomplete="off" autocorrect="off" spellcheck="false" oninput="handleTyping(event)"></textarea>
+                <textarea id="practiceInput" aria-label="Type the displayed practice text" autocomplete="off" autocorrect="off" spellcheck="false" onbeforeinput="capturePracticeBeforeInput(event)" oninput="handleTyping(event)"></textarea>
                 <div id="monkeyText" class="monkey-text"></div>
             </div>
-            <div id="strokeHint" class="stroke-hint"></div>
             <button id="redoPracticeButton" class="redo-practice-button" type="button" onclick="restartPractice()" aria-label="Restart test" title="Restart test">↻</button>
-            <div class="practice-keyboard-hint"><kbd>Enter</kbd> after a quote to continue · <kbd>Tab</kbd> then <kbd>Enter</kbd> to restart · <kbd>Esc</kbd> to end</div>
+            <div class="practice-keyboard-hint"><kbd>Enter</kbd> to restart with new material · <kbd>Esc</kbd> to end</div>
+            <div id="strokeHint" class="stroke-hint"></div>
 
         </div>
 
@@ -676,7 +744,7 @@
                 <button onclick="restartPractice()" class="start-test-button">Try again</button>
                 <button onclick="resetPracticeUI()">Back to practice</button>
             </div>
-            <div class="practice-keyboard-hint result-keyboard-hint"><kbd>Enter</kbd> to practice another quote · <kbd>Esc</kbd> to return to practice setup</div>
+            <div class="practice-keyboard-hint result-keyboard-hint"><kbd>Enter</kbd> to restart with new material · <kbd>Esc</kbd> to return to practice setup</div>
 
             <div class="section-title">Problematic Words (Missed / Typos)</div>
             <div id="missedWordsList" class="dict-list"></div>
