@@ -5824,7 +5824,7 @@ if ('serviceWorker' in navigator) {
 
                 if (firstMismatch < 0) firstMismatch = wIdx;
                 if (insertedSpace &&
-                    getPracticeStrokeCountIncludingPending(wIdx) >= getSelectedPracticeStrokeLimit(target)) {
+                    getPracticeStrokeCountIncludingPending(wIdx) > getSelectedPracticeStrokeLimit(target)) {
                     practiceState.incorrectWordIndices.add(wIdx);
                 }
                 break;
