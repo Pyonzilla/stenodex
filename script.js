@@ -5710,8 +5710,7 @@ if ('serviceWorker' in navigator) {
         const isDeletion = inputType.startsWith('delete');
         const snapshotInputType = isDeletion ? 'deleteContentBackward' : 'insertText';
         if (practiceState.pendingSnapshotTimer
-            && (practiceState.pendingSnapshotIndex !== practiceState.currentIndex
-                || practiceState.pendingSnapshotInputType !== snapshotInputType)) {
+            && practiceState.pendingSnapshotInputType !== snapshotInputType) {
             flushPracticeSnapshotCheck();
         }
         const insertedSpace = isInsertion
@@ -5719,14 +5718,12 @@ if ('serviceWorker' in navigator) {
         const insertedOnlySpace = isInsertion && inputVal.startsWith(previousInput)
             && /^\s+$/u.test(inputVal.slice(previousInput.length));
 
-        if (insertedOnlySpace && practiceState.pendingSnapshotTimer) {
-            flushPracticeSnapshotCheck();
-        }
-
         if (!forceSnapshot && inputVal !== previousInput
             && isInsertion && inputVal.trim() && !insertedOnlySpace) {
+            if (!practiceState.pendingSnapshotTimer) {
+                practiceState.pendingSnapshotIndex = practiceState.currentIndex;
+            }
             practiceState.pendingSnapshotInputType = snapshotInputType;
-            practiceState.pendingSnapshotIndex = practiceState.currentIndex;
             schedulePracticeSnapshotCheck();
         }
 
@@ -6101,7 +6098,12 @@ if ('serviceWorker' in navigator) {
         const now = performance.now();
             const minutes = practiceState.sessionStartTime ? (now - practiceState.sessionStartTime) / 60000 : 0;
         
-            const completedItems = Math.min(practiceState.currentIndex, practiceState.words.length);
+            const lastMatchedIndex = Array.from(practiceState.correctPracticeIndices)
+                .reduce((highest, index) => Math.max(highest, index), -1);
+            const completedItems = Math.min(
+                practiceState.words.length,
+                Math.max(practiceState.currentIndex, lastMatchedIndex + 1)
+            );
             const wordUnitCount = index => practiceState.wordUnitCounts[index] ?? 1;
             practiceState.statsCorrectWords = Array.from(practiceState.correctPracticeIndices)
                 .reduce((total, index) => total + wordUnitCount(index), practiceState.endlessCorrectWordUnits);
