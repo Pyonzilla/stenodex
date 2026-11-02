@@ -5719,6 +5719,10 @@ if ('serviceWorker' in navigator) {
         const insertedOnlySpace = isInsertion && inputVal.startsWith(previousInput)
             && /^\s+$/u.test(inputVal.slice(previousInput.length));
 
+        if (insertedOnlySpace && practiceState.pendingSnapshotTimer) {
+            flushPracticeSnapshotCheck();
+        }
+
         if (!forceSnapshot && inputVal !== previousInput
             && (isDeletion || (isInsertion && inputVal.trim() && !insertedOnlySpace))) {
             practiceState.pendingSnapshotInputType = snapshotInputType;

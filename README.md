@@ -1,4 +1,4 @@
-# StenoDex V8.06
+# StenoDex V8.07
 https://pyonzilla.github.io/stenodex/
 
 Offline Plover dictionary lookup and steno practice.
